@@ -10,6 +10,7 @@ import Comparison from "./Comparison";
 import { CardSkeleton, ChartSkeleton } from "./ui";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
 import { relativeTime, localTime, dayBounds, weekBounds, windowLabel } from "@/lib/time";
+import { summarizePeriod } from "@/lib/summary";
 
 type CustomKind = "day" | "week";
 
@@ -224,6 +225,15 @@ export default function Dashboard({ stationId }: { stationId: string }) {
           <div className="bg-white rounded-xl px-5 py-3 border border-slate-200 text-slate-700">
             Showing <span className="font-medium text-slate-900">{windowLabel(customDate, customKind)}</span>
           </div>
+          {(() => {
+            const lines = summarizePeriod(readings, windowLabel(customDate, customKind));
+            return lines.length ? (
+              <div className="bg-sky-50 border border-sky-100 rounded-xl p-4">
+                <h3 className="text-sm font-medium text-sky-800 mb-1">Summary</h3>
+                <p className="text-sm text-slate-700 leading-relaxed">{lines.join(" ")}</p>
+              </div>
+            ) : null;
+          })()}
           <WeatherCharts mode={mode} readings={readings} daily={daily} range={chartRange} />
         </>
       ) : (

@@ -6,6 +6,7 @@ import {
 } from "recharts";
 import { DailyReading } from "@/lib/types";
 import { ChartSkeleton } from "./ui";
+import { summarizeComparison } from "@/lib/summary";
 
 type Preset = "mom" | "yoy" | "momYoY";
 
@@ -152,6 +153,16 @@ export default function Comparison({ stationId }: { stationId: string }) {
         </div>
       ) : (
         <>
+          {(() => {
+            const lines = summarizeComparison(data.a, data.b, win.aLabel, win.bLabel);
+            return lines.length ? (
+              <div className="bg-sky-50 border border-sky-100 rounded-xl p-4">
+                <h3 className="text-sm font-medium text-sky-800 mb-1">Summary</h3>
+                <p className="text-sm text-slate-700 leading-relaxed">{lines.join(" ")}</p>
+              </div>
+            ) : null;
+          })()}
+
           {/* Stat summary */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
             {METRICS.map((mtr) => {
