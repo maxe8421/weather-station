@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { fetchCurrentObservation, observationToRow } from "@/lib/wunderground";
-import { fetchWeathercloudIndoor, fetchWeathercloudStation } from "@/lib/weathercloud";
+import { fetchWeathercloudBatch } from "@/lib/weathercloud";
 
 export async function GET(request: NextRequest) {
   const secret = request.nextUrl.searchParams.get("secret");
@@ -18,14 +18,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Failed to fetch stations", detail: stationsError?.message }, { status: 500 });
   }
 
-  const indoor = await fetchWeathercloudIndoor();
+  // Batch-fetch all Weathercloud devices in one session
+  const wcStations = stations.filter((s) => s.source === "weathercloud" && s.source_id);
+  const primaryStation = stations.find((s) => s.is_primary);
+  const allWcDeviceIds = [
+    ...wcStations.map((s) => s.source_id!),
+    ...(primaryStation ? [process.env.WEATHERCLOUD_DEVICE_ID!] : []),
+  ];
+  const wcDataMap = await fetchWeathercloudBatch(allWcDeviceIds);
+
   const results = [];
 
   for (const station of stations) {
     let row: Record<string, unknown> | null = null;
 
     if (station.source === "weathercloud" && station.source_id) {
-      const wcData = await fetchWeathercloudStation(station.source_id);
+      const wcData = wcDataMap.get(station.source_id);
       if (wcData) {
         row = { station_id: station.id, ...wcData };
       }
@@ -33,9 +41,12 @@ export async function GET(request: NextRequest) {
       const obs = await fetchCurrentObservation(station.wunderground_id);
       if (obs) {
         row = observationToRow(obs, station.id);
-        if (station.is_primary && indoor) {
-          row.temp_indoor_c = indoor.tempin;
-          row.humidity_indoor = indoor.humin;
+        if (station.is_primary) {
+          const indoor = wcDataMap.get(process.env.WEATHERCLOUD_DEVICE_ID!);
+          if (indoor) {
+            row.temp_indoor_c = indoor.temp_indoor_c;
+            row.humidity_indoor = indoor.humidity_indoor;
+          }
         }
       }
     }

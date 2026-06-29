@@ -5,6 +5,8 @@ create table stations (
   latitude double precision,
   longitude double precision,
   is_primary boolean default false,
+  source text not null default 'wunderground',
+  source_id text,
   created_at timestamptz default now()
 );
 

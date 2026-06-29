@@ -1,6 +1,5 @@
 const WC_EMAIL = process.env.WEATHERCLOUD_EMAIL!;
 const WC_PASSWORD = process.env.WEATHERCLOUD_PASSWORD!;
-const WC_DEVICE_ID = process.env.WEATHERCLOUD_DEVICE_ID!;
 
 let cachedCookie: string | null = null;
 let cachedCsrf: string | null = null;
@@ -72,99 +71,91 @@ async function ensureLoggedIn(): Promise<void> {
   cachedCookie = cookieMapToString(finalCookies);
 }
 
-export interface WeathercloudValues {
-  epoch: number;
-  tempin: number | null;
-  humin: number | null;
-  temp: number | null;
-  hum: number | null;
-  dew: number | null;
-  dewin: number | null;
-  chill: number | null;
-  heat: number | null;
-  heatin: number | null;
-  bar: number | null;
-  wspd: number | null;
-  wspdhi: number | null;
-  wdir: number | null;
-  wspdavg: number | null;
-  wdiravg: number | null;
-  rainrate: number | null;
-  rain: number | null;
-  solarrad: number | null;
-  uvi: number | null;
+interface WCRow {
+  observed_at: string;
+  temp_c: number | null;
+  humidity: number | null;
+  dewpoint_c: number | null;
+  windchill_c: number | null;
+  heat_index_c: number | null;
+  wind_speed_kph: number | null;
+  wind_gust_kph: number | null;
+  wind_dir: number | null;
+  pressure_mb: number | null;
+  precip_rate_mm: number | null;
+  precip_total_mm: number | null;
+  uv: number | null;
+  solar_radiation: number | null;
+  feels_like_c: number | null;
+  temp_indoor_c: number | null;
+  humidity_indoor: number | null;
 }
 
-async function fetchDeviceValues(deviceId: string): Promise<WeathercloudValues | null> {
+async function fetchDeviceValues(deviceId: string): Promise<WCRow | null> {
+  const headers: Record<string, string> = {
+    Cookie: cachedCookie!,
+    "X-Requested-With": "XMLHttpRequest",
+  };
+
+  const csrfParam = cachedCsrf ? `?WEATHERCLOUD_CSRF_TOKEN=${encodeURIComponent(cachedCsrf)}` : "";
+  const url = `https://app.weathercloud.net/device/values/${deviceId}${csrfParam}`;
+
+  const res = await fetch(url, { headers, cache: "no-store" });
+  const text = await res.text();
+
+  if (!text.startsWith("{")) return null;
+
+  const d = JSON.parse(text);
+  return {
+    observed_at: new Date(d.epoch * 1000).toISOString(),
+    temp_c: d.temp ?? null,
+    humidity: d.hum ?? null,
+    dewpoint_c: d.dew ?? null,
+    windchill_c: d.chill ?? null,
+    heat_index_c: d.heat ?? null,
+    wind_speed_kph: d.wspd ?? null,
+    wind_gust_kph: d.wspdhi ?? null,
+    wind_dir: d.wdir ?? null,
+    pressure_mb: d.bar ?? null,
+    precip_rate_mm: d.rainrate ?? null,
+    precip_total_mm: d.rain ?? null,
+    uv: d.uvi ?? null,
+    solar_radiation: d.solarrad ?? null,
+    feels_like_c: d.chill ?? d.heat ?? d.temp ?? null,
+    temp_indoor_c: d.tempin ?? null,
+    humidity_indoor: d.humin ?? null,
+  };
+}
+
+export async function fetchWeathercloudBatch(
+  deviceIds: string[]
+): Promise<Map<string, WCRow>> {
+  const results = new Map<string, WCRow>();
+  if (deviceIds.length === 0) return results;
+
   try {
     await ensureLoggedIn();
 
-    const headers: Record<string, string> = {
-      Cookie: cachedCookie!,
-      "X-Requested-With": "XMLHttpRequest",
-    };
+    for (const id of deviceIds) {
+      if (results.has(id)) continue;
+      const data = await fetchDeviceValues(id);
+      if (data) results.set(id, data);
+    }
 
-    const csrfParam = cachedCsrf ? `?WEATHERCLOUD_CSRF_TOKEN=${encodeURIComponent(cachedCsrf)}` : "";
-    let url = `https://app.weathercloud.net/device/values/${deviceId}${csrfParam}`;
-
-    let res = await fetch(url, { headers, cache: "no-store" });
-    let text = await res.text();
-
-    if (!text.startsWith("{")) {
+    // If we got nothing, try re-login once
+    if (results.size === 0 && deviceIds.length > 0) {
       cachedCookie = null;
       await ensureLoggedIn();
-      headers.Cookie = cachedCookie!;
-      const csrfParam2 = cachedCsrf ? `?WEATHERCLOUD_CSRF_TOKEN=${encodeURIComponent(cachedCsrf)}` : "";
-      url = `https://app.weathercloud.net/device/values/${deviceId}${csrfParam2}`;
-      res = await fetch(url, { headers, cache: "no-store" });
-      text = await res.text();
+      for (const id of deviceIds) {
+        const data = await fetchDeviceValues(id);
+        if (data) results.set(id, data);
+      }
     }
-
-    if (!text.startsWith("{")) {
-      return null;
-    }
-
-    return JSON.parse(text);
   } catch (err) {
-    console.error("Weathercloud error:", err);
+    console.error("Weathercloud batch error:", err);
     cachedCookie = null;
     cachedCsrf = null;
-    return null;
   }
-}
 
-export interface WeathercloudIndoorData {
-  tempin: number | null;
-  humin: number | null;
-}
-
-export async function fetchWeathercloudIndoor(): Promise<WeathercloudIndoorData | null> {
-  const data = await fetchDeviceValues(WC_DEVICE_ID);
-  if (!data) return null;
-  return { tempin: data.tempin ?? null, humin: data.humin ?? null };
-}
-
-export async function fetchWeathercloudStation(deviceId: string) {
-  const data = await fetchDeviceValues(deviceId);
-  if (!data) return null;
-
-  return {
-    observed_at: new Date(data.epoch * 1000).toISOString(),
-    temp_c: data.temp,
-    humidity: data.hum,
-    dewpoint_c: data.dew,
-    windchill_c: data.chill,
-    heat_index_c: data.heat,
-    wind_speed_kph: data.wspd,
-    wind_gust_kph: data.wspdhi,
-    wind_dir: data.wdir,
-    pressure_mb: data.bar,
-    precip_rate_mm: data.rainrate,
-    precip_total_mm: data.rain,
-    uv: data.uvi,
-    solar_radiation: data.solarrad,
-    feels_like_c: data.chill ?? data.heat ?? data.temp,
-    temp_indoor_c: data.tempin,
-    humidity_indoor: data.humin,
-  };
+  return results;
 }
