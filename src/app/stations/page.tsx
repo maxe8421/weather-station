@@ -9,6 +9,8 @@ export default function StationsPage() {
   const [wuId, setWuId] = useState("");
   const [error, setError] = useState("");
   const [adding, setAdding] = useState(false);
+  const [password, setPassword] = useState("");
+  const [authenticated, setAuthenticated] = useState(false);
 
   const fetchStations = () => {
     fetch("/api/stations")
@@ -18,6 +20,11 @@ export default function StationsPage() {
 
   useEffect(fetchStations, []);
 
+  const authHeaders = {
+    "Content-Type": "application/json",
+    "x-admin-secret": password,
+  };
+
   const addStation = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -25,7 +32,7 @@ export default function StationsPage() {
 
     const res = await fetch("/api/stations", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders,
       body: JSON.stringify({ name, wunderground_id: wuId }),
     });
 
@@ -42,13 +49,50 @@ export default function StationsPage() {
 
   const deleteStation = async (id: string) => {
     if (!confirm("Remove this station?")) return;
-    await fetch("/api/stations", {
+    const res = await fetch("/api/stations", {
       method: "DELETE",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders,
       body: JSON.stringify({ id }),
     });
-    fetchStations();
+    if (res.ok) fetchStations();
   };
+
+  if (!authenticated) {
+    return (
+      <main className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+        <div className="max-w-sm mx-auto px-4 py-24">
+          <h1 className="text-2xl font-bold mb-6 text-center">Manage Stations</h1>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              setAuthenticated(true);
+            }}
+            className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-100 dark:border-gray-700"
+          >
+            <label className="block text-sm text-gray-500 mb-2">Admin password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm mb-4"
+            />
+            <button
+              type="submit"
+              className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+            >
+              Continue
+            </button>
+          </form>
+          <div className="text-center mt-4">
+            <a href="/" className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400">
+              ← Home
+            </a>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
@@ -56,7 +100,7 @@ export default function StationsPage() {
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">Manage Stations</h1>
           <a href="/" className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400">
-            ← Dashboard
+            ← Home
           </a>
         </div>
 

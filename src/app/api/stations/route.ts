@@ -16,7 +16,15 @@ export async function GET() {
   return NextResponse.json(data);
 }
 
+function checkAuth(request: NextRequest): boolean {
+  return request.headers.get("x-admin-secret") === process.env.CRON_SECRET;
+}
+
 export async function POST(request: NextRequest) {
+  if (!checkAuth(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = await request.json();
   const { name, wunderground_id } = body;
 
@@ -55,6 +63,10 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  if (!checkAuth(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { id } = await request.json();
 
   const { error } = await getSupabaseAdmin()
