@@ -224,9 +224,9 @@ export default function Dashboard({ stationId }: { stationId: string }) {
                   </div>
                   <button
                     onClick={() => setCustomDate(null)}
-                    className="text-sm text-slate-400 hover:text-slate-700"
+                    className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800 transition-colors"
                   >
-                    Clear
+                    <span aria-hidden="true">←</span> Back to live view
                   </button>
                 </>
               )}
