@@ -15,6 +15,14 @@ interface StationWithLatest extends Station {
     observed_at: string;
   } | null;
   avg_wind_kph: number | null;
+  today: {
+    tempHigh: number | null;
+    tempLow: number | null;
+    tempAvg: number | null;
+    windAvg: number | null;
+    gust: number | null;
+    rain: number | null;
+  } | null;
   summary: string | null;
 }
 
@@ -28,39 +36,39 @@ interface RegionStats {
   maxRain: number | null;
 }
 
-/** Aggregate the current conditions of all stations in one region (country group). */
+/** Aggregate today's daily figures across all stations in one region. */
 function regionStats(list: StationWithLatest[]): RegionStats {
   const withData = list.filter((s) => s.latest);
-  const temps = withData.map((s) => s.latest!.temp_c).filter((v): v is number => v !== null);
-  const avgTemp = temps.length ? r1(temps.reduce((a, b) => a + b, 0) / temps.length) : null;
-  const byTemp = withData.filter((s) => s.latest!.temp_c !== null);
-  const warmest = byTemp.length ? byTemp.reduce((m, s) => (s.latest!.temp_c! > m.latest!.temp_c! ? s : m)) : null;
-  const byWind = withData.filter((s) => s.avg_wind_kph !== null);
-  const windiest = byWind.length ? byWind.reduce((m, s) => (s.avg_wind_kph! > m.avg_wind_kph! ? s : m)) : null;
-  const rains = withData.map((s) => s.latest!.precip_total_mm).filter((v): v is number => v !== null);
+  const avgs = withData.map((s) => s.today?.tempAvg).filter((v): v is number => v != null);
+  const avgTemp = avgs.length ? r1(avgs.reduce((a, b) => a + b, 0) / avgs.length) : null;
+  const byHigh = withData.filter((s) => s.today?.tempHigh != null);
+  const warmest = byHigh.length ? byHigh.reduce((m, s) => (s.today!.tempHigh! > m.today!.tempHigh! ? s : m)) : null;
+  const byWind = withData.filter((s) => s.today?.windAvg != null);
+  const windiest = byWind.length ? byWind.reduce((m, s) => (s.today!.windAvg! > m.today!.windAvg! ? s : m)) : null;
+  const rains = withData.map((s) => s.today?.rain).filter((v): v is number => v != null);
   const maxRain = rains.length ? r1(Math.max(...rains)) : null;
   return { count: withData.length, avgTemp, warmest, windiest, maxRain };
 }
 
-/** One-line summary headline for a region. */
+/** One-line summary headline for a region, based on today's daily aggregates. */
 function regionHeadline(s: RegionStats): string {
   const parts: string[] = [`${s.count} station${s.count === 1 ? "" : "s"}`];
-  if (s.avgTemp !== null) parts.push(`avg ${s.avgTemp}°`);
-  if (s.warmest && s.count > 1) parts.push(`warmest ${s.warmest.name} ${s.warmest.latest!.temp_c}°`);
-  if (s.windiest && (s.windiest.avg_wind_kph ?? 0) > 0) parts.push(`windiest ${s.windiest.name} ${s.windiest.avg_wind_kph} km/h`);
+  if (s.avgTemp !== null) parts.push(`avg ${s.avgTemp}° today`);
+  if (s.warmest && s.count > 1) parts.push(`warmest ${s.warmest.name} ${s.warmest.today!.tempHigh}°`);
+  if (s.windiest && (s.windiest.today!.windAvg ?? 0) > 0) parts.push(`windiest ${s.windiest.name} ${s.windiest.today!.windAvg} km/h`);
   if (s.maxRain && s.maxRain > 0) parts.push(`up to ${s.maxRain} mm rain`);
   return parts.join(" · ");
 }
 
-/** Cross-region comparison line (warmest vs coolest region), or null if <2 regions report. */
+/** Cross-region comparison line (warmest vs coolest by today's average temp), or null if <2 regions report. */
 function crossRegionHeadline(regions: { country: string; stats: RegionStats }[]): string | null {
   const withTemp = regions.filter((r) => r.stats.avgTemp !== null);
   if (withTemp.length < 2) return null;
   const warm = withTemp.reduce((m, r) => (r.stats.avgTemp! > m.stats.avgTemp! ? r : m));
   const cool = withTemp.reduce((m, r) => (r.stats.avgTemp! < m.stats.avgTemp! ? r : m));
   const diff = r1(warm.stats.avgTemp! - cool.stats.avgTemp!);
-  if (diff < 0.1) return `All ${withTemp.length} regions are averaging about ${warm.stats.avgTemp}° right now.`;
-  return `${warm.country} is the warmest region right now (avg ${warm.stats.avgTemp}°), ${cool.country} the coolest (${cool.stats.avgTemp}°) — ${diff}° apart.`;
+  if (diff < 0.1) return `All ${withTemp.length} regions are averaging about ${warm.stats.avgTemp}° today.`;
+  return `${warm.country} is the warmest region today (avg ${warm.stats.avgTemp}°), ${cool.country} the coolest (${cool.stats.avgTemp}°) — ${diff}° apart.`;
 }
 
 function Stat({ label, value, unit }: { label: string; value: number | null; unit?: string }) {
