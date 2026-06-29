@@ -111,7 +111,8 @@ export function sunshineHours(readings: WeatherReading[]): number | null {
   return Math.round((ms / 3_600_000) * 10) / 10;
 }
 
-/** Per-day bright-sunshine hours over a window of raw readings (24h / 7d / custom). */
+/** Per-day bright-sunshine hours over a window of raw readings (used for the
+ *  "today" figure in the current-conditions card). */
 export function sunshineByDay(
   readings: WeatherReading[],
   range: TimeRange
@@ -128,6 +129,77 @@ export function sunshineByDay(
   return Array.from(byDay.values())
     .sort((a, b) => a.sort - b.sort)
     .map((g) => ({ label: formatDay(g.date, range), hours: sunshineHours(g.rows) }));
+}
+
+interface SunshinePoint {
+  label: string;
+  dayLabel: string | null;
+  fullLabel: string;
+  hours: number | null;
+}
+
+/**
+ * Bright-sunshine hours bucketed to match the other charts: one point per raw
+ * reading on 24h, 6-hour buckets on 7d. Each value is the hours of sunshine
+ * accumulated within that bucket (each reading contributes the sunlit portion
+ * of the interval that follows it). Daily ranges use the rollup instead.
+ */
+export function sunshineSeries(readings: WeatherReading[], range: TimeRange): SunshinePoint[] {
+  const pts = readings
+    .filter((r) => r.solar_radiation !== null)
+    .map((r) => ({ t: new Date(r.observed_at).getTime(), s: r.solar_radiation as number }))
+    .sort((a, b) => a.t - b.t);
+  if (pts.length === 0) return [];
+
+  const MAX_GAP_MS = 30 * 60 * 1000;
+  // Hours of sunshine in the interval starting at each reading; the final
+  // reading has no following interval, mirroring sunshineHours() so totals match.
+  const contribs = pts.map((p, i) => ({
+    t: p.t,
+    hours:
+      p.s >= SUNSHINE_THRESHOLD_WM2 && i < pts.length - 1
+        ? Math.min(pts[i + 1].t - p.t, MAX_GAP_MS) / 3_600_000
+        : 0,
+  }));
+
+  if (range === "24h") {
+    return contribs.map((c) => {
+      const d = new Date(c.t);
+      return {
+        label: formatTime(d.toISOString(), "24h"),
+        dayLabel: null,
+        fullLabel: d.toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" }),
+        hours: Math.round(c.hours * 100) / 100,
+      };
+    });
+  }
+
+  // 7d: 6-hour windows aligned to 00:00 / 06:00 / 12:00 / 18:00 local, matching
+  // aggregateReadings so the x-axis lines up with the other 7-day charts.
+  interface Bucket { sort: number; label: string; dayLabel: string | null; fullLabel: string; hours: number }
+  const groups = new Map<string, Bucket>();
+  for (const c of contribs) {
+    const d = new Date(c.t);
+    const bucketHour = Math.floor(d.getHours() / 6) * 6;
+    const bucket = new Date(d);
+    bucket.setHours(bucketHour, 0, 0, 0);
+    const key = bucket.toISOString();
+    if (!groups.has(key)) {
+      const label = `${pad2(bucketHour)}:00`;
+      const dayShort = bucket.toLocaleDateString([], { weekday: "short", day: "numeric" });
+      groups.set(key, {
+        sort: bucket.getTime(),
+        label,
+        dayLabel: bucketHour === 0 ? dayShort : null,
+        fullLabel: `${dayShort}, ${label}`,
+        hours: 0,
+      });
+    }
+    groups.get(key)!.hours += c.hours;
+  }
+  return Array.from(groups.values())
+    .sort((a, b) => a.sort - b.sort)
+    .map((g) => ({ label: g.label, dayLabel: g.dayLabel, fullLabel: g.fullLabel, hours: Math.round(g.hours * 10) / 10 }));
 }
 
 export function aggregateReadings(

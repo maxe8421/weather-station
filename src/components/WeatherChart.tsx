@@ -7,7 +7,7 @@ import {
 import { WeatherReading, DailyReading, TimeRange } from "@/lib/types";
 import {
   formatTime, formatDay, aggregateDaily, aggregateReadings, windDirToCompass,
-  hourlyWindDirection, sunshineByDay,
+  hourlyWindDirection, sunshineSeries,
 } from "@/lib/utils";
 
 const COLORS = {
@@ -296,20 +296,21 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
     );
   }
 
-  // Daily bright-sunshine hours (WMO ≥120 W/m²). Each bar is one day: a single
-  // bar for 24h, one per day across 7d / 30d / longer. Mirrors Weathercloud's
-  // "hours" figure shown under Solar Radiation.
+  // Bright-sunshine hours (WMO ≥120 W/m²), bucketed to match the other charts:
+  // per-reading on 24h, 6-hour buckets on 7d, one bar per day for 30d / longer.
+  // Each bar is the sunshine accumulated within that bucket. Mirrors
+  // Weathercloud's "hours" figure shown under Solar Radiation.
   function SunshineCard() {
-    const rows = isDaily
-      ? daily.map((r) => ({ label: formatDay(r.day, range), fullLabel: formatDay(r.day, range), Hours: r.sunshine_hours }))
-      : sunshineByDay(readings, range).map((p) => ({ label: p.label, fullLabel: p.label, Hours: p.hours }));
+    const rows: Row[] = isDaily
+      ? daily.map((r) => ({ label: formatDay(r.day, range), dayLabel: null, fullLabel: formatDay(r.day, range), Hours: r.sunshine_hours }))
+      : sunshineSeries(readings, range).map((p) => ({ label: p.label, dayLabel: p.dayLabel, fullLabel: p.fullLabel, Hours: p.hours }));
     if (!rowsHaveData(rows, ["Hours"])) return <NoData title="Sunshine" />;
     return (
       <Panel title="Sunshine">
         <ChartFrame>
           <BarChart data={rows}>
             <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
-            <XAxis dataKey="label" fontSize={12} tick={TICK_STYLE} />
+            {buildTimeAxis(range, rows)}
             <YAxis fontSize={12} tick={TICK_STYLE} unit=" h" allowDecimals />
             <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: "rgba(0,0,0,0.04)" }} labelFormatter={tipLabel} />
             <Bar dataKey="Hours" name="Sunshine (hrs)" fill={COLORS.amber} radius={[2, 2, 0, 0]} />
