@@ -115,8 +115,11 @@ function parseValues(text: string): WCRow | null {
 
 export async function fetchWeathercloudPublic(deviceId: string): Promise<WCRow | null> {
   try {
+    // Try device endpoint first, then METAR endpoint for airport stations
+    const isMetar = /^[A-Z]{4}$/.test(deviceId);
+    const endpoint = isMetar ? "metar/values" : "device/values";
     const res = await fetch(
-      `https://app.weathercloud.net/device/values/${deviceId}`,
+      `https://app.weathercloud.net/${endpoint}/${deviceId}`,
       { headers: { "X-Requested-With": "XMLHttpRequest" }, cache: "no-store" }
     );
     return parseValues(await res.text());
