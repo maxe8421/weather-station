@@ -6,6 +6,7 @@ import TimeRangeSelector from "./TimeRangeSelector";
 import CurrentConditions from "./CurrentConditions";
 import WeatherCharts from "./WeatherChart";
 import StationMap from "./StationMap";
+import { supabaseBrowser } from "@/lib/supabaseBrowser";
 
 export default function Dashboard({ stationId }: { stationId: string }) {
   const [station, setStation] = useState<Station | null>(null);
@@ -56,9 +57,29 @@ export default function Dashboard({ stationId }: { stationId: string }) {
   useEffect(() => {
     setLoading(true);
     fetchReadings();
-    const interval = setInterval(fetchReadings, 60000);
-    return () => clearInterval(interval);
-  }, [fetchReadings]);
+
+    // Refresh the moment a new reading is inserted for this station, with a
+    // slow fallback poll in case the realtime socket drops.
+    const channel = supabaseBrowser
+      .channel(`readings-${stationId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "weather_readings",
+          filter: `station_id=eq.${stationId}`,
+        },
+        () => fetchReadings()
+      )
+      .subscribe();
+
+    const fallback = setInterval(fetchReadings, 5 * 60 * 1000);
+    return () => {
+      supabaseBrowser.removeChannel(channel);
+      clearInterval(fallback);
+    };
+  }, [fetchReadings, stationId]);
 
   return (
     <div className="space-y-6">

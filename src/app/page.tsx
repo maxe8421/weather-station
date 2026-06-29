@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Station } from "@/lib/types";
+import { supabaseBrowser } from "@/lib/supabaseBrowser";
 
 interface StationWithLatest extends Station {
   latest: {
@@ -30,8 +31,23 @@ export default function Home() {
         .catch(() => {})
         .finally(() => setLoading(false));
     load();
-    const interval = setInterval(load, 60000);
-    return () => clearInterval(interval);
+
+    // Refresh when any station receives a new reading, with a slow fallback
+    // poll in case the realtime socket drops.
+    const channel = supabaseBrowser
+      .channel("home-readings")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "weather_readings" },
+        () => load()
+      )
+      .subscribe();
+
+    const fallback = setInterval(load, 5 * 60 * 1000);
+    return () => {
+      supabaseBrowser.removeChannel(channel);
+      clearInterval(fallback);
+    };
   }, []);
 
   return (

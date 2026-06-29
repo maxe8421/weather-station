@@ -4,14 +4,17 @@ import { isValidUuid } from "@/lib/auth";
 import { TimeRange } from "@/lib/types";
 
 // Generous caps for raw ranges so we never silently hit PostgREST's 1000-row
-// default. At one reading / 10 min: 24h≈144, 7d≈1008, 30d≈4320.
+// default. At one reading / 10 min: 24h≈144, 7d≈1008.
 const RAW_LIMITS: Record<string, number> = {
   "24h": 200,
   "7d": 1200,
-  "30d": 4600,
 };
 
 const VALID_RANGES: TimeRange[] = ["24h", "7d", "30d", "1y", "all"];
+
+// Columns selected from the persisted daily rollup table (matches DailyReading).
+const DAILY_COLUMNS =
+  "day, temp_avg, temp_min, temp_max, temp_indoor_c, feels_like_c, dewpoint_c, humidity, pressure_mb, wind_speed_kph, wind_gust_kph, wind_dir, precip_total_mm, precip_rate_mm, uv, solar_radiation";
 
 function windowStart(range: TimeRange, now: number): Date {
   switch (range) {
@@ -44,9 +47,7 @@ export async function GET(request: NextRequest) {
   const supabase = getSupabasePublic();
   const from = windowStart(range, Date.now());
 
-  // The latest raw reading is returned independently of range so that the
-  // current-conditions panel always shows live values, even when the charts
-  // are showing daily aggregates.
+  // Current conditions stay live regardless of range.
   const latestPromise = supabase
     .from("weather_readings")
     .select("*")
@@ -55,26 +56,36 @@ export async function GET(request: NextRequest) {
     .limit(1)
     .maybeSingle();
 
-  // Long ranges are aggregated to daily buckets in Postgres. This avoids both
-  // the row-cap truncation and multi-megabyte payloads, and keeps day buckets
-  // year-correct (a year is part of each bucket key in SQL).
-  if (range === "1y" || range === "all") {
+  // 30d: aggregate from raw on the server (raw is within the 90-day retention
+  // window) — keeps the chart live while shrinking the payload to ~30 rows.
+  if (range === "30d") {
     const [{ data: daily, error }, { data: latest }] = await Promise.all([
-      supabase.rpc("readings_daily", {
-        p_station_id: stationId,
-        p_from: from.toISOString(),
-      }),
+      supabase.rpc("readings_daily", { p_station_id: stationId, p_from: from.toISOString() }),
       latestPromise,
     ]);
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ mode: "daily", data: daily ?? [], latest: latest ?? null });
   }
 
-  // Raw ranges: fetch the most recent N (descending) then reverse to ascending,
-  // guaranteeing we return the newest data and never silently truncate.
+  // 1y / all: read the persisted daily rollup so long ranges keep working after
+  // raw rows are pruned, and transfer only ~one row per day.
+  if (range === "1y" || range === "all") {
+    const fromDate = from.toISOString().slice(0, 10);
+    const [{ data: daily, error }, { data: latest }] = await Promise.all([
+      supabase
+        .from("daily_readings")
+        .select(DAILY_COLUMNS)
+        .eq("station_id", stationId)
+        .gte("day", fromDate)
+        .order("day", { ascending: true }),
+      latestPromise,
+    ]);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ mode: "daily", data: daily ?? [], latest: latest ?? null });
+  }
+
+  // 24h / 7d: raw rows. Fetch most-recent-first with an explicit cap, then
+  // reverse to ascending so we never silently truncate the tail.
   const [{ data, error }, { data: latest }] = await Promise.all([
     supabase
       .from("weather_readings")
@@ -86,9 +97,7 @@ export async function GET(request: NextRequest) {
     latestPromise,
   ]);
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const ascending = (data ?? []).slice().reverse();
   return NextResponse.json({ mode: "raw", data: ascending, latest: latest ?? null });
