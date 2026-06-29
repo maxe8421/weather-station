@@ -46,6 +46,12 @@ export default function CurrentConditions({ reading }: { reading: WeatherReading
         <Card label="UV Index" value={reading.uv} />
         <Card label="Solar Radiation" value={reading.solar_radiation} unit="W/m²" />
         <Card label="Wind Direction" value={reading.wind_dir !== null ? `${reading.wind_dir}° ${windDirToCompass(reading.wind_dir)}` : null} />
+        {reading.temp_indoor_c !== null && (
+          <Card label="Indoor Temp" value={reading.temp_indoor_c} unit="°C" />
+        )}
+        {reading.humidity_indoor !== null && (
+          <Card label="Indoor Humidity" value={reading.humidity_indoor} unit="%" />
+        )}
       </div>
     </div>
   );

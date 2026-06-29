@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { fetchCurrentObservation, observationToRow } from "@/lib/wunderground";
+import { fetchWeathercloudIndoor } from "@/lib/weathercloud";
 
 export async function GET(request: NextRequest) {
   const secret = request.nextUrl.searchParams.get("secret");
@@ -11,12 +12,13 @@ export async function GET(request: NextRequest) {
   const supabase = getSupabaseAdmin();
   const { data: stations, error: stationsError } = await supabase
     .from("stations")
-    .select("id, wunderground_id");
+    .select("id, wunderground_id, is_primary");
 
   if (stationsError || !stations) {
     return NextResponse.json({ error: "Failed to fetch stations", detail: stationsError?.message }, { status: 500 });
   }
 
+  const indoor = await fetchWeathercloudIndoor();
   const results = [];
 
   for (const station of stations) {
@@ -26,7 +28,13 @@ export async function GET(request: NextRequest) {
       continue;
     }
 
-    const row = observationToRow(obs, station.id);
+    const row: Record<string, unknown> = observationToRow(obs, station.id);
+
+    if (station.is_primary && indoor) {
+      row.temp_indoor_c = indoor.tempin;
+      row.humidity_indoor = indoor.humin;
+    }
+
     const { error } = await supabase
       .from("weather_readings")
       .upsert(row, { onConflict: "station_id,observed_at" });
@@ -35,6 +43,7 @@ export async function GET(request: NextRequest) {
       station: station.wunderground_id,
       status: error ? "error" : "ok",
       error: error?.message,
+      indoor: station.is_primary ? indoor : undefined,
     });
   }
 

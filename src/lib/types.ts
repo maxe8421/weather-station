@@ -27,6 +27,8 @@ export interface WeatherReading {
   solar_radiation: number | null;
   feels_like_c: number | null;
   elevation: number | null;
+  temp_indoor_c: number | null;
+  humidity_indoor: number | null;
 }
 
 export type TimeRange = "24h" | "7d" | "30d" | "1y" | "all";
