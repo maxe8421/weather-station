@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     .select("id, wunderground_id");
 
   if (stationsError || !stations) {
-    return NextResponse.json({ error: "Failed to fetch stations" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to fetch stations", detail: stationsError?.message }, { status: 500 });
   }
 
   const results = [];

@@ -37,18 +37,18 @@ const CHART_CONFIGS: ChartConfig[] = [
   {
     title: "Wind",
     fields: [
-      { key: "wind_speed_mph", label: "Speed", color: "#10b981" },
-      { key: "wind_gust_mph", label: "Gust", color: "#f59e0b" },
+      { key: "wind_speed_kph", label: "Speed", color: "#10b981" },
+      { key: "wind_gust_kph", label: "Gust", color: "#f59e0b" },
     ],
-    unit: "mph",
+    unit: "km/h",
   },
   {
     title: "Rain",
     fields: [
-      { key: "precip_rate_in", label: "Rate", color: "#3b82f6" },
-      { key: "precip_total_in", label: "Total", color: "#1d4ed8" },
+      { key: "precip_rate_mm", label: "Rate", color: "#3b82f6" },
+      { key: "precip_total_mm", label: "Total", color: "#1d4ed8" },
     ],
-    unit: "in",
+    unit: "mm",
   },
   {
     title: "UV & Solar",

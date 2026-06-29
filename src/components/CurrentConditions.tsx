@@ -38,11 +38,11 @@ export default function CurrentConditions({ reading }: { reading: WeatherReading
         <Card label="Feels Like" value={reading.feels_like_c} unit="°C" />
         <Card label="Humidity" value={reading.humidity} unit="%" />
         <Card label="Dew Point" value={reading.dewpoint_c} unit="°C" />
-        <Card label="Wind" value={reading.wind_speed_mph} unit={`mph ${windDirToCompass(reading.wind_dir)}`} />
-        <Card label="Wind Gust" value={reading.wind_gust_mph} unit="mph" />
+        <Card label="Wind" value={reading.wind_speed_kph} unit={`km/h ${windDirToCompass(reading.wind_dir)}`} />
+        <Card label="Wind Gust" value={reading.wind_gust_kph} unit="km/h" />
         <Card label="Pressure" value={reading.pressure_mb} unit="hPa" />
-        <Card label="Rain Rate" value={reading.precip_rate_in} unit="in/hr" />
-        <Card label="Rain Today" value={reading.precip_total_in} unit="in" />
+        <Card label="Rain Rate" value={reading.precip_rate_mm} unit="mm/hr" />
+        <Card label="Rain Today" value={reading.precip_total_mm} unit="mm" />
         <Card label="UV Index" value={reading.uv} />
         <Card label="Solar Radiation" value={reading.solar_radiation} unit="W/m²" />
         <Card label="Wind Direction" value={reading.wind_dir !== null ? `${reading.wind_dir}° ${windDirToCompass(reading.wind_dir)}` : null} />

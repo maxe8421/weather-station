@@ -24,28 +24,17 @@ export interface WUObservation {
     precipTotal: number | null;
     elev: number | null;
   };
-  imperial: {
-    temp: number | null;
-    heatIndex: number | null;
-    dewpt: number | null;
-    windChill: number | null;
-    windSpeed: number | null;
-    windGust: number | null;
-    pressure: number | null;
-    precipRate: number | null;
-    precipTotal: number | null;
-    elev: number | null;
-  };
 }
 
 export async function fetchCurrentObservation(
   stationId: string
 ): Promise<WUObservation | null> {
-  const url = `${BASE_URL}?stationId=${stationId}&format=json&units=both&apiKey=${API_KEY}`;
+  const url = `${BASE_URL}?stationId=${stationId}&format=json&units=m&numericPrecision=decimal&apiKey=${API_KEY}`;
   const res = await fetch(url, { cache: "no-store" });
 
   if (!res.ok) {
-    console.error(`WU API error for ${stationId}: ${res.status}`);
+    const body = await res.text();
+    console.error(`WU API error for ${stationId}: ${res.status}`, body);
     return null;
   }
 
@@ -57,29 +46,24 @@ export function observationToRow(
   obs: WUObservation,
   stationId: string
 ) {
+  const m = obs.metric;
   return {
     station_id: stationId,
     observed_at: obs.obsTimeUtc,
-    temp_f: obs.imperial.temp,
-    temp_c: obs.metric.temp,
+    temp_c: m.temp,
     humidity: obs.humidity,
-    dewpoint_f: obs.imperial.dewpt,
-    dewpoint_c: obs.metric.dewpt,
-    windchill_f: obs.imperial.windChill,
-    windchill_c: obs.metric.windChill,
-    heat_index_f: obs.imperial.heatIndex,
-    heat_index_c: obs.metric.heatIndex,
-    wind_speed_mph: obs.imperial.windSpeed,
-    wind_gust_mph: obs.imperial.windGust,
+    dewpoint_c: m.dewpt,
+    windchill_c: m.windChill,
+    heat_index_c: m.heatIndex,
+    wind_speed_kph: m.windSpeed,
+    wind_gust_kph: m.windGust,
     wind_dir: obs.winddir,
-    pressure_in: obs.imperial.pressure,
-    pressure_mb: obs.metric.pressure,
-    precip_rate_in: obs.imperial.precipRate,
-    precip_total_in: obs.imperial.precipTotal,
+    pressure_mb: m.pressure,
+    precip_rate_mm: m.precipRate,
+    precip_total_mm: m.precipTotal,
     uv: obs.uv,
     solar_radiation: obs.solarRadiation,
-    feels_like_f: obs.imperial.windChill ?? obs.imperial.heatIndex ?? obs.imperial.temp,
-    feels_like_c: obs.metric.windChill ?? obs.metric.heatIndex ?? obs.metric.temp,
-    elevation: obs.imperial.elev,
+    feels_like_c: m.windChill ?? m.heatIndex ?? m.temp,
+    elevation: m.elev,
   };
 }
