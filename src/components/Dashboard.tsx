@@ -170,63 +170,66 @@ export default function Dashboard({ stationId }: { stationId: string }) {
           </div>
         </div>
 
-        <div className="flex flex-col items-stretch sm:items-end gap-2">
-          <div className="flex items-center gap-2">
-            <TimeRangeSelector selected={customDate ? null : range} onSelect={selectPreset} />
-            <button
-              onClick={() => setCompareMode((v) => !v)}
-              className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-                compareMode
-                  ? "bg-sky-600 text-white border-sky-600"
-                  : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
-              }`}
-            >
-              Compare
-            </button>
-          </div>
-          <div className={`flex items-center gap-2 ${compareMode ? "opacity-40 pointer-events-none" : ""}`}>
-            <input
-              type="date"
-              min={pickerMin}
-              max={pickerMax}
-              disabled={pickerDisabled}
-              title={pickerDisabled ? "No data yet" : `Data available ${pickerMin} to ${pickerMax}`}
-              value={customDate ?? ""}
-              onChange={(e) => setCustomDate(e.target.value || null)}
-              className={`${dateInputClass} disabled:opacity-50 disabled:cursor-not-allowed`}
-            />
-            {customDate && (
-              <>
-                <div className="flex bg-slate-100 rounded-lg p-0.5">
-                  {(["day", "week"] as CustomKind[]).map((k) => (
-                    <button
-                      key={k}
-                      onClick={() => setCustomKind(k)}
-                      className={`px-3 py-1 text-sm rounded-md capitalize transition-colors ${
-                        customKind === k ? "bg-white shadow-sm font-medium text-slate-800" : "text-slate-500"
-                      }`}
-                    >
-                      {k}
-                    </button>
-                  ))}
-                </div>
-                <button
-                  onClick={() => setCustomDate(null)}
-                  className="text-sm text-slate-400 hover:text-slate-700"
-                >
-                  Clear
-                </button>
-              </>
-            )}
-          </div>
-          {!compareMode && (
+        {compareMode ? (
+          <button
+            onClick={() => setCompareMode(false)}
+            className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800 transition-colors"
+          >
+            <span aria-hidden="true">←</span> Back to live view
+          </button>
+        ) : (
+          <div className="flex flex-col items-stretch sm:items-end gap-2">
+            <div className="flex items-center gap-2">
+              <TimeRangeSelector selected={customDate ? null : range} onSelect={selectPreset} />
+              <button
+                onClick={() => setCompareMode(true)}
+                className="px-3 py-1.5 text-sm rounded-lg border bg-white text-slate-600 border-slate-200 hover:border-slate-300 transition-colors"
+              >
+                Compare
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                min={pickerMin}
+                max={pickerMax}
+                disabled={pickerDisabled}
+                title={pickerDisabled ? "No data yet" : `Data available ${pickerMin} to ${pickerMax}`}
+                value={customDate ?? ""}
+                onChange={(e) => setCustomDate(e.target.value || null)}
+                className={`${dateInputClass} disabled:opacity-50 disabled:cursor-not-allowed`}
+              />
+              {customDate && (
+                <>
+                  <div className="flex bg-slate-100 rounded-lg p-0.5">
+                    {(["day", "week"] as CustomKind[]).map((k) => (
+                      <button
+                        key={k}
+                        onClick={() => setCustomKind(k)}
+                        className={`px-3 py-1 text-sm rounded-md capitalize transition-colors ${
+                          customKind === k ? "bg-white shadow-sm font-medium text-slate-800" : "text-slate-500"
+                        }`}
+                      >
+                        {k}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setCustomDate(null)}
+                    className="text-sm text-slate-400 hover:text-slate-700"
+                  >
+                    Clear
+                  </button>
+                </>
+              )}
+            </div>
             <p className="text-xs text-slate-400">
               {pickerDisabled
                 ? "No data available yet"
                 : `Data available ${new Date(`${pickerMin}T00:00:00`).toLocaleDateString([], { day: "numeric", month: "short" })} – ${new Date(`${pickerMax}T00:00:00`).toLocaleDateString([], { day: "numeric", month: "short" })}`}
             </p>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {compareMode ? (
