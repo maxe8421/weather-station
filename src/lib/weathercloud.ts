@@ -109,6 +109,51 @@ function parseValues(text: string): PartialRow | null {
   };
 }
 
+function dmsToDecimal(deg: number, min: number, sec: number, hemi: string): number {
+  let dec = deg + min / 60 + sec / 3600;
+  if (hemi === "S" || hemi === "W") dec = -dec;
+  return Math.round(dec * 1e5) / 1e5;
+}
+
+/**
+ * Scrape decimal coordinates from a Weathercloud profile page. The lat/lon are
+ * rendered in DMS form inside <div id="profile-coordinates"> on the public page
+ * (there is no JSON endpoint for them), e.g. `45° 53' 6" N  82° 34' 4" W`.
+ */
+export async function fetchWeathercloudCoordinates(
+  deviceId: string
+): Promise<{ latitude: number; longitude: number } | null> {
+  try {
+    const isMetar = /^[a-z]{4}$/i.test(deviceId);
+    const code = isMetar ? deviceId.toUpperCase() : deviceId;
+    const res = await fetchWithTimeout(`https://app.weathercloud.net/d${code}`, {
+      cache: "no-store",
+    });
+    const html = await res.text();
+
+    const div = html.match(/id="profile-coordinates"[^>]*>([\s\S]*?)<\/div>/);
+    if (!div) return null;
+
+    const text = div[1]
+      .replace(/&nbsp;/g, " ")
+      .replace(/&deg;/g, "°")
+      .replace(/&#\d+;/g, " ");
+
+    const re = /(\d+(?:\.\d+)?)[^\d]+(\d+(?:\.\d+)?)[^\d]+(\d+(?:\.\d+)?)[^\d]*([NSEW])/g;
+    const matches = [...text.matchAll(re)];
+    if (matches.length < 2) return null;
+
+    const [lat, lon] = matches;
+    return {
+      latitude: dmsToDecimal(+lat[1], +lat[2], +lat[3], lat[4]),
+      longitude: dmsToDecimal(+lon[1], +lon[2], +lon[3], lon[4]),
+    };
+  } catch (err) {
+    console.error(`Weathercloud coordinate fetch failed for ${deviceId}:`, err);
+    return null;
+  }
+}
+
 function valuesUrl(deviceId: string): string {
   // 4-letter codes (any case) are airport METAR stations on a different endpoint.
   const isMetar = /^[a-z]{4}$/i.test(deviceId);

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin, getSupabasePublic } from "@/lib/supabase";
 import { fetchCurrentObservation } from "@/lib/wunderground";
+import { fetchWeathercloudCoordinates } from "@/lib/weathercloud";
 import { isAuthorised, isValidUuid } from "@/lib/auth";
 
 export async function GET() {
@@ -71,6 +72,7 @@ export async function POST(request: NextRequest) {
   // device IDs and are stored verbatim.
   const isMetar = /^[a-z]{4}$/i.test(rawId);
   const sourceId = isMetar ? rawId.toUpperCase() : rawId;
+  const coords = await fetchWeathercloudCoordinates(sourceId);
 
   const { data, error } = await admin
     .from("stations")
@@ -79,6 +81,8 @@ export async function POST(request: NextRequest) {
       wunderground_id: `WC-${sourceId}`,
       source: "weathercloud",
       source_id: sourceId,
+      latitude: coords?.latitude ?? null,
+      longitude: coords?.longitude ?? null,
     })
     .select()
     .single();

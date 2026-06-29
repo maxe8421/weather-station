@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { fetchCurrentObservation, observationToRow } from "@/lib/wunderground";
-import { fetchWeathercloudPublic, fetchWeathercloudAuthed } from "@/lib/weathercloud";
+import {
+  fetchWeathercloudPublic,
+  fetchWeathercloudAuthed,
+  fetchWeathercloudCoordinates,
+} from "@/lib/weathercloud";
 import { normalizeRow, ReadingRow } from "@/lib/reading";
 import { isAuthorised } from "@/lib/auth";
 import { mapLimit } from "@/lib/http";
@@ -12,6 +16,8 @@ interface StationRow {
   source: "wunderground" | "weathercloud";
   source_id: string | null;
   is_primary: boolean;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 export async function GET(request: NextRequest) {
@@ -22,7 +28,7 @@ export async function GET(request: NextRequest) {
   const supabase = getSupabaseAdmin();
   const { data: stations, error: stationsError } = await supabase
     .from("stations")
-    .select("id, wunderground_id, source, source_id, is_primary");
+    .select("id, wunderground_id, source, source_id, is_primary, latitude, longitude");
 
   if (stationsError || !stations) {
     return NextResponse.json(
@@ -94,6 +100,21 @@ export async function GET(request: NextRequest) {
     status: upsertError ? "error" : o.status,
     error: o.status === "ok" ? upsertError : undefined,
   }));
+
+  // One-time backfill of coordinates for Weathercloud stations added before
+  // coordinate capture existed. Runs only while latitude is still null.
+  const needCoords = wcStations.filter((s) => s.latitude === null);
+  if (needCoords.length > 0) {
+    await mapLimit(needCoords, 2, async (station) => {
+      const coords = await fetchWeathercloudCoordinates(station.source_id!);
+      if (coords) {
+        await supabase
+          .from("stations")
+          .update({ latitude: coords.latitude, longitude: coords.longitude })
+          .eq("id", station.id);
+      }
+    });
+  }
 
   const anyStored = !upsertError && outcomes.some((o) => o.status === "ok");
   return NextResponse.json({ results }, { status: anyStored ? 200 : 500 });
