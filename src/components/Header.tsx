@@ -12,9 +12,14 @@ export default function Header() {
           </svg>
           Weather Station
         </a>
-        <a href="/stations" className="text-sm text-slate-600 hover:text-slate-900 transition-colors">
-          Manage stations
-        </a>
+        <nav className="flex items-center gap-4">
+          <a href="/compare" className="text-sm text-slate-600 hover:text-slate-900 transition-colors">
+            Compare
+          </a>
+          <a href="/stations" className="text-sm text-slate-600 hover:text-slate-900 transition-colors">
+            Manage stations
+          </a>
+        </nav>
       </div>
     </header>
   );
