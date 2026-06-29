@@ -10,9 +10,11 @@ It is built to run on Vercel's free tier with a free Supabase Postgres database 
 - **Multi-source ingestion** — pulls from the Weather Underground PWS API, public Weathercloud devices, and Weathercloud METAR (airport) stations.
 - **Indoor metrics** — captures indoor temperature and humidity for your own station by authenticating against Weathercloud (data the public APIs do not expose).
 - **Multi-station** — track any number of stations worldwide; add or remove them from a password-protected management page.
-- **Overview home page** — a card per station showing current outdoor temperature, indoor temperature (where available), 1-hour average wind speed, and rainfall.
-- **Per-station dashboard** — current-conditions cards plus time-series charts for temperature (outdoor/indoor/dew point), humidity, pressure, wind speed, rainfall, wind direction, and UV/solar radiation.
-- **Adaptive aggregation** — raw 10-minute points for 24h, hourly averages for 7d, daily averages for 30d and longer; temperature additionally shows daily min/avg/max.
+- **Overview home page** — a card per station showing current outdoor temperature, indoor temperature (where available), 1-hour average wind speed, rainfall, and a one-line plain-English summary of the day (today's high/low, rainfall, and peak gust).
+- **Per-station dashboard** — current-conditions cards plus time-series charts for temperature (outdoor/indoor/dew point), humidity, pressure, wind speed, rainfall, wind direction, UV/solar radiation, and daily hours of sunshine.
+- **Rule-based summaries** — deterministic, plain-English summaries of any window (no LLM, no API cost): warmest/coldest points, rainfall and wet days, peak gust, pressure trend, and hours of sunshine. Shown on both the home page (per card) and each station's detail view.
+- **Hours of sunshine** — bright-sunshine duration derived from solar radiation using the WMO ≥120 W/m² threshold, charted per day and rolled up into the daily history (mirrors Weathercloud's "hours" figure under Solar Radiation).
+- **Adaptive aggregation** — raw 10-minute points for 24h, 6-hour buckets for 7d, daily averages for 30d and longer; temperature additionally shows daily min/avg/max, and wind direction is shown as an hourly circular (vector) mean on the 24h view rather than a hard-to-read scatter of raw points.
 - **Auto-refresh** — the UI re-polls every 60 seconds with no manual reload.
 - **Health monitoring** — a `/api/health` endpoint returns HTTP 500 when any station's data goes stale, designed to drive email alerts from an external cron monitor.
 - **Metric units throughout** — °C, km/h, hPa, mm.
@@ -47,7 +49,9 @@ npm install
 
 ### 2. Create the database
 
-In the Supabase dashboard open the **SQL Editor** and run the contents of [`supabase/schema.sql`](supabase/schema.sql). This creates the `stations` and `weather_readings` tables, the indexes, the row-level-security read policies, and inserts your primary station.
+In the Supabase dashboard open the **SQL Editor** and run the contents of [`supabase/schema.sql`](supabase/schema.sql). This creates the `stations` and `weather_readings` tables, the `daily_readings` rollup, the aggregation functions, the indexes, the row-level-security read policies, and inserts your primary station.
+
+> **Upgrading an existing database?** The bottom of `schema.sql` has a `MIGRATION` block with the incremental `alter table` statements. The hours-of-sunshine feature in particular adds a `daily_readings.sunshine_hours` column and updates the `readings_daily` / `rollup_daily` functions — apply those, then run `select rollup_daily();` once to backfill sunshine for existing days. (The live 24h/7d sunshine chart works without any migration, since it is computed in the browser from raw solar-radiation readings; only the 30d+ daily history depends on the rollup.)
 
 ### 3. Configure environment variables
 
@@ -150,9 +154,15 @@ curl -i -X POST http://localhost:3000/api/stations \
 
 # 12. Health when data is stale — expect 500 with issues[]
 curl -i "http://localhost:3000/api/health"
+
+# 13. Home-page payload — each station carries a one-line `summary`
+curl -s "http://localhost:3000/api/latest" | python3 -m json.tool
+
+# 14. Daily readings include `sunshine_hours` (null until rollup_daily has run)
+curl -s "http://localhost:3000/api/readings?station_id=<uuid>&range=30d" | python3 -m json.tool
 ```
 
-A production hardening pass should add a runner (Vitest or Jest) covering: the `range`→date-window mapping and row limits in `/api/readings`; circular wind averaging and year-aware bucketing in `src/lib/utils.ts`; the Wunderground and Weathercloud/METAR field mapping; and the auth guards on `/api/collect` and `/api/stations`.
+A production hardening pass should add a runner (Vitest or Jest) covering: the `range`→date-window mapping and row limits in `/api/readings`; circular wind averaging, hourly wind-direction bucketing, and the sunshine-hours threshold logic in `src/lib/utils.ts`; the rule-based summary phrasing in `src/lib/summary.ts`; the Wunderground and Weathercloud/METAR field mapping; and the auth guards on `/api/collect` and `/api/stations`.
 
 ## Architecture / Project Structure
 
@@ -185,7 +195,8 @@ weather-station/
 │       ├── supabase.ts            # Lazy admin (service) + public (anon) clients
 │       ├── wunderground.ts        # WU PWS API fetch + row mapping
 │       ├── weathercloud.ts        # Public + authed fetch, login/session, METAR
-│       ├── utils.ts               # Time formatting, daily/hourly aggregation, wind compass
+│       ├── utils.ts               # Time formatting, daily/hourly aggregation, circular wind mean, sunshine hours
+│       ├── summary.ts             # Deterministic plain-English period/comparison summaries
 │       └── types.ts               # Station / WeatherReading / TimeRange types
 ```
 

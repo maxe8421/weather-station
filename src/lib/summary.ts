@@ -1,4 +1,5 @@
 import { DailyReading, WeatherReading } from "./types";
+import { sunshineHours } from "./utils";
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
 const nums = (vals: (number | null)[]) => vals.filter((v): v is number => v !== null && v !== undefined);
@@ -77,6 +78,12 @@ export function summarizeDaily(series: DailyReading[], label: string): string[] 
     out.push(`Windiest day peaked at ${r1(gust.wind_gust_kph)} km/h (${fmtDay(gust.day)}).`);
   }
 
+  const sunDays = series.filter((r) => r.sunshine_hours !== null);
+  if (sunDays.length) {
+    const sunTotal = r1(sum(sunDays.map((r) => r.sunshine_hours)));
+    out.push(`${sunTotal} hours of sunshine, averaging ${r1(sunTotal / sunDays.length)} h/day.`);
+  }
+
   return out;
 }
 
@@ -118,6 +125,11 @@ export function summarizePeriod(readings: WeatherReading[], label: string): stri
   const gusts = nums(readings.map((r) => r.wind_gust_kph));
   if (gusts.length) {
     out.push(`Peak gust ${r1(Math.max(...gusts))} km/h.`);
+  }
+
+  const sun = sunshineHours(readings);
+  if (sun !== null) {
+    out.push(`${sun} hour${sun === 1 ? "" : "s"} of sunshine.`);
   }
 
   const pressures = nums(readings.map((r) => r.pressure_mb));

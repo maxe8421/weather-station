@@ -77,7 +77,8 @@ returns table (
   precip_total_mm double precision,
   precip_rate_mm double precision,
   uv double precision,
-  solar_radiation double precision
+  solar_radiation double precision,
+  sunshine_hours double precision
 )
 language sql
 stable
@@ -100,7 +101,12 @@ as $$
     round(max(precip_total_mm)::numeric, 2)::float8,
     round(max(precip_rate_mm)::numeric, 2)::float8,
     round(avg(uv)::numeric, 1)::float8,
-    round(avg(solar_radiation)::numeric, 0)::float8
+    round(avg(solar_radiation)::numeric, 0)::float8,
+    -- Bright-sunshine hours: intervals at/above 120 W/m² (WMO threshold),
+    -- estimated at the 10-minute collection cadence. Null when no solar sensor.
+    case when count(solar_radiation) = 0 then null
+      else round((count(*) filter (where solar_radiation >= 120) * 10.0 / 60.0)::numeric, 1)::float8
+    end
   from weather_readings
   where station_id = p_station_id and observed_at >= p_from
   group by day
@@ -130,6 +136,7 @@ create table daily_readings (
   precip_rate_mm double precision,
   uv double precision,
   solar_radiation double precision,
+  sunshine_hours double precision,
   primary key (station_id, day)
 );
 
@@ -151,7 +158,7 @@ begin
   insert into daily_readings (
     station_id, day, temp_avg, temp_min, temp_max, temp_indoor_c, feels_like_c,
     dewpoint_c, humidity, pressure_mb, wind_speed_kph, wind_gust_kph, wind_dir,
-    precip_total_mm, precip_rate_mm, uv, solar_radiation
+    precip_total_mm, precip_rate_mm, uv, solar_radiation, sunshine_hours
   )
   select
     station_id,
@@ -172,7 +179,10 @@ begin
     round(max(precip_total_mm)::numeric, 2)::float8,
     round(max(precip_rate_mm)::numeric, 2)::float8,
     round(avg(uv)::numeric, 1)::float8,
-    round(avg(solar_radiation)::numeric, 0)::float8
+    round(avg(solar_radiation)::numeric, 0)::float8,
+    case when count(solar_radiation) = 0 then null
+      else round((count(*) filter (where solar_radiation >= 120) * 10.0 / 60.0)::numeric, 1)::float8
+    end
   from weather_readings
   group by station_id, day
   on conflict (station_id, day) do update set
@@ -182,7 +192,8 @@ begin
     pressure_mb = excluded.pressure_mb, wind_speed_kph = excluded.wind_speed_kph,
     wind_gust_kph = excluded.wind_gust_kph, wind_dir = excluded.wind_dir,
     precip_total_mm = excluded.precip_total_mm, precip_rate_mm = excluded.precip_rate_mm,
-    uv = excluded.uv, solar_radiation = excluded.solar_radiation;
+    uv = excluded.uv, solar_radiation = excluded.solar_radiation,
+    sunshine_hours = excluded.sunshine_hours;
 
   delete from weather_readings
   where observed_at < (now() - make_interval(days => retention_days));
@@ -210,5 +221,9 @@ values ('Kingston', 'IKINGS664', 'wunderground', 'IKINGS664', true);
 --   alter table weather_readings add column if not exists temp_indoor_c double precision;
 --   alter table weather_readings add column if not exists humidity_indoor integer;
 --   alter table stations drop constraint if exists stations_wunderground_id_key;
---   -- then run the create-or-replace function + grant above.
+--   alter table daily_readings add column if not exists sunshine_hours double precision;
+--   -- then re-run the readings_daily + rollup_daily create-or-replace functions
+--   -- above (they now compute sunshine_hours), and run rollup_daily() once to
+--   -- backfill the new column for existing days:
+--   --   select rollup_daily();
 -- =============================================================

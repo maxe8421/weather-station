@@ -15,6 +15,7 @@ interface StationWithLatest extends Station {
     observed_at: string;
   } | null;
   avg_wind_kph: number | null;
+  summary: string | null;
 }
 
 function Stat({ label, value, unit }: { label: string; value: number | null; unit?: string }) {
@@ -83,6 +84,11 @@ function StationCard({ s, now }: { s: StationWithLatest; now: Date }) {
             <Stat label="Wind (1 hr avg)" value={s.avg_wind_kph} unit="km/h" />
             <Stat label="Rain today" value={s.latest.precip_total_mm} unit="mm" />
           </div>
+          {s.summary && (
+            <p className="text-xs text-slate-500 mt-4 leading-relaxed border-t border-slate-100 pt-3">
+              {s.summary}
+            </p>
+          )}
           <div
             className={`text-xs mt-4 flex items-center gap-1.5 ${
               stale ? "text-amber-600" : "text-slate-400"

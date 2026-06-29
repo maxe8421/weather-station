@@ -55,6 +55,7 @@ export interface DailyReading {
   precip_rate_mm: number | null;
   uv: number | null;
   solar_radiation: number | null;
+  sunshine_hours: number | null;
 }
 
 export interface ReadingsResponse {
