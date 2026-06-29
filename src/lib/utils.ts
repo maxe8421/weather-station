@@ -135,8 +135,12 @@ interface SunshinePoint {
   label: string;
   dayLabel: string | null;
   fullLabel: string;
+  /** Local calendar day (YYYY-MM-DD) of the bucket, for per-day cumulative resets. */
+  day: string;
   hours: number | null;
 }
+
+const localDay = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
 /**
  * Bright-sunshine hours bucketed to match the other charts: one point per raw
@@ -169,6 +173,7 @@ export function sunshineSeries(readings: WeatherReading[], range: TimeRange): Su
         label: formatTime(d.toISOString(), "24h"),
         dayLabel: null,
         fullLabel: d.toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" }),
+        day: localDay(d),
         hours: Math.round(c.hours * 100) / 100,
       };
     });
@@ -176,7 +181,7 @@ export function sunshineSeries(readings: WeatherReading[], range: TimeRange): Su
 
   // 7d: 6-hour windows aligned to 00:00 / 06:00 / 12:00 / 18:00 local, matching
   // aggregateReadings so the x-axis lines up with the other 7-day charts.
-  interface Bucket { sort: number; label: string; dayLabel: string | null; fullLabel: string; hours: number }
+  interface Bucket { sort: number; label: string; dayLabel: string | null; fullLabel: string; day: string; hours: number }
   const groups = new Map<string, Bucket>();
   for (const c of contribs) {
     const d = new Date(c.t);
@@ -192,6 +197,7 @@ export function sunshineSeries(readings: WeatherReading[], range: TimeRange): Su
         label,
         dayLabel: bucketHour === 0 ? dayShort : null,
         fullLabel: `${dayShort}, ${label}`,
+        day: localDay(bucket),
         hours: 0,
       });
     }
@@ -199,7 +205,7 @@ export function sunshineSeries(readings: WeatherReading[], range: TimeRange): Su
   }
   return Array.from(groups.values())
     .sort((a, b) => a.sort - b.sort)
-    .map((g) => ({ label: g.label, dayLabel: g.dayLabel, fullLabel: g.fullLabel, hours: Math.round(g.hours * 10) / 10 }));
+    .map((g) => ({ label: g.label, dayLabel: g.dayLabel, fullLabel: g.fullLabel, day: g.day, hours: Math.round(g.hours * 10) / 10 }));
 }
 
 export function aggregateReadings(

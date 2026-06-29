@@ -296,25 +296,53 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
     );
   }
 
-  // Bright-sunshine hours (WMO ≥120 W/m²), bucketed to match the other charts:
-  // per-reading on 24h, 6-hour buckets on 7d, one bar per day for 30d / longer.
-  // Each bar is the sunshine accumulated within that bucket. Mirrors
-  // Weathercloud's "hours" figure shown under Solar Radiation.
+  // Bright-sunshine hours (WMO ≥120 W/m²). On 24h / 7d it's a cumulative line that
+  // climbs through each day and resets at midnight (cumulative within the day),
+  // built from per-reading / 6-hour increments. On 30d and longer it's a daily-total
+  // bar chart. Mirrors Weathercloud's "hours" figure under Solar Radiation.
   function SunshineCard() {
-    const rows: Row[] = isDaily
-      ? daily.map((r) => ({ label: formatDay(r.day, range), dayLabel: null, fullLabel: formatDay(r.day, range), Hours: r.sunshine_hours }))
-      : sunshineSeries(readings, range).map((p) => ({ label: p.label, dayLabel: p.dayLabel, fullLabel: p.fullLabel, Hours: p.hours }));
-    if (!rowsHaveData(rows, ["Hours"])) return <NoData title="Sunshine" />;
+    if (isDaily) {
+      const rows: Row[] = daily.map((r) => ({
+        label: formatDay(r.day, range), dayLabel: null, fullLabel: formatDay(r.day, range), Hours: r.sunshine_hours,
+      }));
+      if (!rowsHaveData(rows, ["Hours"])) return <NoData title="Sunshine" />;
+      return (
+        <Panel title="Sunshine (Daily Total)">
+          <ChartFrame>
+            <BarChart data={rows}>
+              <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
+              {buildTimeAxis(range, rows)}
+              <YAxis fontSize={12} tick={TICK_STYLE} unit=" h" allowDecimals />
+              <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: "rgba(0,0,0,0.04)" }} labelFormatter={tipLabel} />
+              <Bar dataKey="Hours" name="Sunshine (hrs)" fill={COLORS.amber} radius={[2, 2, 0, 0]} />
+            </BarChart>
+          </ChartFrame>
+        </Panel>
+      );
+    }
+
+    const series = sunshineSeries(readings, range);
+    if (!series.some((p) => p.hours !== null && p.hours !== undefined)) return <NoData title="Sunshine" />;
+
+    // Running total that resets at each local-day boundary.
+    let running = 0;
+    let prevDay: string | null = null;
+    const rows: Row[] = series.map((p) => {
+      if (p.day !== prevDay) { running = 0; prevDay = p.day; }
+      running += p.hours ?? 0;
+      return { label: p.label, dayLabel: p.dayLabel, fullLabel: p.fullLabel, Cumulative: Math.round(running * 10) / 10 };
+    });
+
     return (
-      <Panel title="Sunshine">
+      <Panel title="Sunshine (Cumulative)">
         <ChartFrame>
-          <BarChart data={rows}>
-            <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
+          <LineChart data={rows}>
+            <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
             {buildTimeAxis(range, rows)}
             <YAxis fontSize={12} tick={TICK_STYLE} unit=" h" allowDecimals />
-            <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: "rgba(0,0,0,0.04)" }} labelFormatter={tipLabel} />
-            <Bar dataKey="Hours" name="Sunshine (hrs)" fill={COLORS.amber} radius={[2, 2, 0, 0]} />
-          </BarChart>
+            <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={tipLabel} />
+            <Line type="monotone" dataKey="Cumulative" name="Cumulative sunshine (hrs)" stroke={COLORS.amber} dot={range === "7d" ? { r: 2 } : false} strokeWidth={2} connectNulls />
+          </LineChart>
         </ChartFrame>
       </Panel>
     );
