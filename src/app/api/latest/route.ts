@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import { getSupabasePublic } from "@/lib/supabase";
+import { sunshineHours } from "@/lib/utils";
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
 const mean = (v: number[]) => (v.length ? r1(v.reduce((a, b) => a + b, 0) / v.length) : null);
 
 interface DayRow {
+  observed_at: string;
   temp_c: number | null;
   wind_speed_kph: number | null;
   wind_gust_kph: number | null;
+  solar_radiation: number | null;
 }
 
 export interface TodayStats {
@@ -17,6 +20,7 @@ export interface TodayStats {
   windAvg: number | null;
   gust: number | null;
   rain: number | null;
+  sunshine: number | null;
 }
 
 /** Structured daily aggregates from the last 24h of readings (plus today's rain). */
@@ -31,6 +35,7 @@ function todayStats(rows: DayRow[], rainToday: number | null): TodayStats {
     windAvg: mean(winds),
     gust: gusts.length ? r1(Math.max(...gusts)) : null,
     rain: rainToday,
+    sunshine: sunshineHours(rows),
   };
 }
 
@@ -82,7 +87,7 @@ export async function GET() {
           .gte("observed_at", oneHourAgo),
         supabase
           .from("weather_readings")
-          .select("temp_c, wind_speed_kph, wind_gust_kph")
+          .select("observed_at, temp_c, wind_speed_kph, wind_gust_kph, solar_radiation")
           .eq("station_id", station.id)
           .gte("observed_at", oneDayAgo),
       ]);
