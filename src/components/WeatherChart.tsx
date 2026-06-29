@@ -58,6 +58,18 @@ function rowsHaveData(rows: Row[], labels: string[]): boolean {
   return rows.some((r) => labels.some((l) => r[l] !== null && r[l] !== undefined));
 }
 
+// Responsive chart height: taller on larger screens so charts scale up with
+// the widening container instead of staying short.
+function ChartFrame({ children }: { children: React.ReactElement }) {
+  return (
+    <div className="h-[250px] xl:h-[320px] 2xl:h-[380px]">
+      <ResponsiveContainer width="100%" height="100%">
+        {children}
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 export default function WeatherCharts({ mode, readings, daily, range }: ChartsProps) {
   const isDaily = mode === "daily";
   const hasAny = isDaily ? daily.length > 0 : readings.length > 0;
@@ -106,7 +118,7 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
     if (!rowsHaveData(rows, labels)) return <NoData title={title} />;
     return (
       <Panel title={title}>
-        <ResponsiveContainer width="100%" height={250}>
+        <ChartFrame>
           <LineChart data={rows}>
             <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
             <XAxis dataKey="label" fontSize={12} tick={TICK_STYLE} />
@@ -117,7 +129,7 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
               <Line key={f.label} type="monotone" dataKey={f.label} stroke={f.color} dot={false} strokeWidth={2} connectNulls />
             ))}
           </LineChart>
-        </ResponsiveContainer>
+        </ChartFrame>
       </Panel>
     );
   }
@@ -131,7 +143,7 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
       if (!rowsHaveData(summary as Row[], ["min", "avg", "max"])) return <NoData title={title} />;
       return (
         <Panel title={title}>
-          <ResponsiveContainer width="100%" height={250}>
+          <ChartFrame>
             <LineChart data={summary}>
               <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
               <XAxis dataKey="label" fontSize={12} tick={TICK_STYLE} />
@@ -142,7 +154,7 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
               <Line type="monotone" dataKey="avg" name="Avg" stroke={COLORS.orange} dot={false} strokeWidth={2} connectNulls />
               <Line type="monotone" dataKey="min" name="Min" stroke={COLORS.blue} dot={false} strokeWidth={1.5} connectNulls />
             </LineChart>
-          </ResponsiveContainer>
+          </ChartFrame>
         </Panel>
       );
     }
@@ -173,7 +185,7 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
       if (points.length === 0) return <NoData title={title} />;
       return (
         <Panel title={title}>
-          <ResponsiveContainer width="100%" height={250}>
+          <ChartFrame>
             <ScatterChart>
               <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
               <XAxis dataKey="label" fontSize={12} tick={TICK_STYLE} />
@@ -189,7 +201,7 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
               />
               <Scatter data={points} fill={COLORS.green} opacity={0.7} />
             </ScatterChart>
-          </ResponsiveContainer>
+          </ChartFrame>
           <div className="text-xs text-gray-400 mt-1 text-center">Dot size = wind speed</div>
         </Panel>
       );
@@ -199,7 +211,7 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
     if (!rowsHaveData(rows, ["Direction"])) return <NoData title={title} />;
     return (
       <Panel title={title}>
-        <ResponsiveContainer width="100%" height={250}>
+        <ChartFrame>
           <LineChart data={rows}>
             <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
             <XAxis dataKey="label" fontSize={12} tick={TICK_STYLE} />
@@ -212,7 +224,7 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
             />
             <Line type="stepAfter" dataKey="Direction" stroke={COLORS.green} dot={false} strokeWidth={2} connectNulls />
           </LineChart>
-        </ResponsiveContainer>
+        </ChartFrame>
       </Panel>
     );
   }
@@ -227,7 +239,7 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
     if (!rowsHaveData(rows, labels)) return <NoData title="Rainfall" />;
     return (
       <Panel title="Rainfall">
-        <ResponsiveContainer width="100%" height={250}>
+        <ChartFrame>
           <BarChart data={rows}>
             <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
             <XAxis dataKey="label" fontSize={12} tick={TICK_STYLE} />
@@ -238,7 +250,7 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
               <Bar key={f.label} dataKey={f.label} fill={f.color} radius={[2, 2, 0, 0]} />
             ))}
           </BarChart>
-        </ResponsiveContainer>
+        </ChartFrame>
       </Panel>
     );
   }
@@ -251,7 +263,7 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
     if (!rowsHaveData(rows, ["UV Index", "Solar Radiation"])) return <NoData title="UV & Solar Radiation" />;
     return (
       <Panel title="UV & Solar Radiation">
-        <ResponsiveContainer width="100%" height={250}>
+        <ChartFrame>
           <LineChart data={rows}>
             <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
             <XAxis dataKey="label" fontSize={12} tick={TICK_STYLE} />
@@ -264,13 +276,13 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
             <Line yAxisId="uv" type="monotone" dataKey="UV Index" stroke={COLORS.amber} dot={false} strokeWidth={2} connectNulls />
             <Line yAxisId="solar" type="monotone" dataKey="Solar Radiation" stroke={COLORS.pink} dot={false} strokeWidth={2} connectNulls />
           </LineChart>
-        </ResponsiveContainer>
+        </ChartFrame>
       </Panel>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <TemperatureCard />
       <LineCard title="Humidity" unit="%" fields={[{ key: "humidity", label: "Humidity", color: COLORS.cyan }]} />
       <LineCard title="Pressure" unit="hPa" fields={[{ key: "pressure_mb", label: "Pressure", color: COLORS.purple }]} />
