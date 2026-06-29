@@ -264,12 +264,16 @@ export default function Dashboard({ stationId }: { stationId: string }) {
         </>
       ) : (
         <>
-          <CurrentConditions reading={latest} />
-          <SummaryCard
-            lines={
-              mode === "daily"
-                ? summarizeDaily(daily, RANGE_LABEL[range] ?? "this period")
-                : summarizePeriod(readings, RANGE_LABEL[range] ?? "this period")
+          <CurrentConditions
+            reading={latest}
+            afterHero={
+              <SummaryCard
+                lines={
+                  mode === "daily"
+                    ? summarizeDaily(daily, RANGE_LABEL[range] ?? "this period")
+                    : summarizePeriod(readings, RANGE_LABEL[range] ?? "this period")
+                }
+              />
             }
           />
           {station && station.latitude !== null && station.longitude !== null && (

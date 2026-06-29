@@ -30,7 +30,13 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
   );
 }
 
-export default function CurrentConditions({ reading }: { reading: WeatherReading | null }) {
+export default function CurrentConditions({
+  reading,
+  afterHero,
+}: {
+  reading: WeatherReading | null;
+  afterHero?: React.ReactNode;
+}) {
   if (!reading) {
     return (
       <div className="bg-white rounded-xl p-8 border border-slate-200 text-center text-slate-400">
@@ -63,6 +69,8 @@ export default function CurrentConditions({ reading }: { reading: WeatherReading
           <div className="text-slate-600 mt-2">{summary.join(" · ")}</div>
         )}
       </div>
+
+      {afterHero}
 
       <Group title="Temperature">
         <Metric label="Temperature" value={reading.temp_c} unit="°C" />
