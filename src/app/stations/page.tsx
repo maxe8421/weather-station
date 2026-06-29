@@ -96,6 +96,12 @@ export default function StationsPage() {
   if (!authenticated) {
     return (
       <main className="max-w-sm mx-auto px-4 py-20 w-full">
+        <a
+          href="/"
+          className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800 transition-colors mb-4"
+        >
+          <span aria-hidden="true">←</span> All stations
+        </a>
         <h1 className="text-xl font-semibold text-slate-900 mb-6 text-center">Manage stations</h1>
         <form onSubmit={verifyPassword} className="bg-white rounded-xl p-6 border border-slate-200">
           <label htmlFor="admin-pw" className="block text-sm text-slate-600 mb-2">
@@ -124,6 +130,12 @@ export default function StationsPage() {
 
   return (
     <main className="max-w-2xl mx-auto px-4 py-8 w-full">
+      <a
+        href="/"
+        className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800 transition-colors mb-2"
+      >
+        <span aria-hidden="true">←</span> All stations
+      </a>
       <h1 className="text-2xl font-semibold text-slate-900 mb-6">Manage stations</h1>
 
       <form onSubmit={addStation} className="bg-white rounded-xl p-5 border border-slate-200 mb-8">
