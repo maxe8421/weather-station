@@ -30,6 +30,8 @@ export default function Dashboard({ stationId }: { stationId: string }) {
 
   useEffect(() => {
     fetchReadings();
+    const interval = setInterval(fetchReadings, 60000);
+    return () => clearInterval(interval);
   }, [fetchReadings]);
 
   const latestReading = readings.length > 0 ? readings[readings.length - 1] : null;

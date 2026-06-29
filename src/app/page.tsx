@@ -17,12 +17,16 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/latest")
-      .then((r) => r.json())
-      .then((data) => {
-        setStations(data);
-        setLoading(false);
-      });
+    const load = () =>
+      fetch("/api/latest")
+        .then((r) => r.json())
+        .then((data) => {
+          setStations(data);
+          setLoading(false);
+        });
+    load();
+    const interval = setInterval(load, 60000);
+    return () => clearInterval(interval);
   }, []);
 
   return (
