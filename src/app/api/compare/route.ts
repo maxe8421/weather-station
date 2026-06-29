@@ -5,7 +5,7 @@ import { isValidUuid } from "@/lib/auth";
 const DAILY_COLUMNS =
   "day, temp_avg, temp_min, temp_max, temp_indoor_c, feels_like_c, dewpoint_c, humidity, pressure_mb, wind_speed_kph, wind_gust_kph, wind_dir, precip_total_mm, precip_rate_mm, uv, solar_radiation";
 
-async function fetchWindow(
+async function fetchDaily(
   supabase: ReturnType<typeof getSupabasePublic>,
   stationId: string,
   from: string,
@@ -18,6 +18,23 @@ async function fetchWindow(
     .gte("day", from)
     .lt("day", to)
     .order("day", { ascending: true });
+  return { data: data ?? [], error };
+}
+
+async function fetchRaw(
+  supabase: ReturnType<typeof getSupabasePublic>,
+  stationId: string,
+  from: string,
+  to: string
+) {
+  const { data, error } = await supabase
+    .from("weather_readings")
+    .select("*")
+    .eq("station_id", stationId)
+    .gte("observed_at", from)
+    .lt("observed_at", to)
+    .order("observed_at", { ascending: true })
+    .limit(400);
   return { data: data ?? [], error };
 }
 
@@ -37,6 +54,7 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = getSupabasePublic();
+  const fetchWindow = p.get("g") === "raw" ? fetchRaw : fetchDaily;
   const [a, b] = await Promise.all([
     fetchWindow(supabase, stationId, aFrom, aTo),
     fetchWindow(supabase, stationId, bFrom, bTo),
