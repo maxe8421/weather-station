@@ -28,9 +28,7 @@ function getCsrfFromCookies(map: Map<string, string>): string | null {
   return decodeURIComponent(csrf.split("=").slice(1).join("="));
 }
 
-async function ensureLoggedIn(): Promise<void> {
-  if (cachedCookie) return;
-
+async function login(): Promise<void> {
   const signinPage = await fetch("https://app.weathercloud.net/signin", {
     redirect: "manual",
   });
@@ -91,20 +89,8 @@ interface WCRow {
   humidity_indoor: number | null;
 }
 
-async function fetchDeviceValues(deviceId: string): Promise<WCRow | null> {
-  const headers: Record<string, string> = {
-    Cookie: cachedCookie!,
-    "X-Requested-With": "XMLHttpRequest",
-  };
-
-  const csrfParam = cachedCsrf ? `?WEATHERCLOUD_CSRF_TOKEN=${encodeURIComponent(cachedCsrf)}` : "";
-  const url = `https://app.weathercloud.net/device/values/${deviceId}${csrfParam}`;
-
-  const res = await fetch(url, { headers, cache: "no-store" });
-  const text = await res.text();
-
+function parseValues(text: string): WCRow | null {
   if (!text.startsWith("{")) return null;
-
   const d = JSON.parse(text);
   return {
     observed_at: new Date(d.epoch * 1000).toISOString(),
@@ -127,35 +113,57 @@ async function fetchDeviceValues(deviceId: string): Promise<WCRow | null> {
   };
 }
 
-export async function fetchWeathercloudBatch(
-  deviceIds: string[]
-): Promise<Map<string, WCRow>> {
-  const results = new Map<string, WCRow>();
-  if (deviceIds.length === 0) return results;
-
+export async function fetchWeathercloudPublic(deviceId: string): Promise<WCRow | null> {
   try {
-    await ensureLoggedIn();
-
-    for (const id of deviceIds) {
-      if (results.has(id)) continue;
-      const data = await fetchDeviceValues(id);
-      if (data) results.set(id, data);
-    }
-
-    // If we got nothing, try re-login once
-    if (results.size === 0 && deviceIds.length > 0) {
-      cachedCookie = null;
-      await ensureLoggedIn();
-      for (const id of deviceIds) {
-        const data = await fetchDeviceValues(id);
-        if (data) results.set(id, data);
-      }
-    }
+    const res = await fetch(
+      `https://app.weathercloud.net/device/values/${deviceId}`,
+      { headers: { "X-Requested-With": "XMLHttpRequest" }, cache: "no-store" }
+    );
+    return parseValues(await res.text());
   } catch (err) {
-    console.error("Weathercloud batch error:", err);
+    console.error("Weathercloud public fetch error:", err);
+    return null;
+  }
+}
+
+async function isSessionValid(): Promise<boolean> {
+  if (!cachedCookie) return false;
+  try {
+    const testDeviceId = process.env.WEATHERCLOUD_DEVICE_ID!;
+    const res = await fetch(
+      `https://app.weathercloud.net/device/values/${testDeviceId}`,
+      {
+        headers: { Cookie: cachedCookie, "X-Requested-With": "XMLHttpRequest" },
+        cache: "no-store",
+      }
+    );
+    const text = await res.text();
+    return text.startsWith("{") && text.includes("tempin");
+  } catch {
+    return false;
+  }
+}
+
+export async function fetchWeathercloudAuthed(deviceId: string): Promise<WCRow | null> {
+  try {
+    if (!await isSessionValid()) {
+      await login();
+    }
+
+    const headers: Record<string, string> = {
+      Cookie: cachedCookie!,
+      "X-Requested-With": "XMLHttpRequest",
+    };
+    const csrfParam = cachedCsrf ? `?WEATHERCLOUD_CSRF_TOKEN=${encodeURIComponent(cachedCsrf)}` : "";
+    const res = await fetch(
+      `https://app.weathercloud.net/device/values/${deviceId}${csrfParam}`,
+      { headers, cache: "no-store" }
+    );
+    return parseValues(await res.text());
+  } catch (err) {
+    console.error("Weathercloud authed fetch error:", err);
     cachedCookie = null;
     cachedCsrf = null;
+    return null;
   }
-
-  return results;
 }
