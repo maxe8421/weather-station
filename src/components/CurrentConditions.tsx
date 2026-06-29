@@ -1,0 +1,52 @@
+"use client";
+
+import { WeatherReading } from "@/lib/types";
+import { windDirToCompass } from "@/lib/utils";
+
+function Card({ label, value, unit }: { label: string; value: string | number | null; unit?: string }) {
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700">
+      <div className="text-sm text-gray-500 dark:text-gray-400">{label}</div>
+      <div className="text-2xl font-semibold mt-1">
+        {value !== null && value !== undefined ? (
+          <>
+            {value}
+            {unit && <span className="text-sm font-normal text-gray-400 ml-1">{unit}</span>}
+          </>
+        ) : (
+          "—"
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function CurrentConditions({ reading }: { reading: WeatherReading | null }) {
+  if (!reading) {
+    return <div className="text-gray-500 text-center py-8">No data available</div>;
+  }
+
+  const time = new Date(reading.observed_at).toLocaleString();
+
+  return (
+    <div>
+      <div className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+        Last updated: {time}
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        <Card label="Temperature" value={reading.temp_c} unit="°C" />
+        <Card label="Feels Like" value={reading.feels_like_c} unit="°C" />
+        <Card label="Humidity" value={reading.humidity} unit="%" />
+        <Card label="Dew Point" value={reading.dewpoint_c} unit="°C" />
+        <Card label="Wind" value={reading.wind_speed_mph} unit={`mph ${windDirToCompass(reading.wind_dir)}`} />
+        <Card label="Wind Gust" value={reading.wind_gust_mph} unit="mph" />
+        <Card label="Pressure" value={reading.pressure_mb} unit="hPa" />
+        <Card label="Rain Rate" value={reading.precip_rate_in} unit="in/hr" />
+        <Card label="Rain Today" value={reading.precip_total_in} unit="in" />
+        <Card label="UV Index" value={reading.uv} />
+        <Card label="Solar Radiation" value={reading.solar_radiation} unit="W/m²" />
+        <Card label="Wind Direction" value={reading.wind_dir !== null ? `${reading.wind_dir}° ${windDirToCompass(reading.wind_dir)}` : null} />
+      </div>
+    </div>
+  );
+}
