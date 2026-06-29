@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Station, WeatherReading, DailyReading, TimeRange, ReadingsResponse } from "@/lib/types";
 import TimeRangeSelector from "./TimeRangeSelector";
 import CurrentConditions from "./CurrentConditions";
 import WeatherCharts from "./WeatherChart";
 import StationMap from "./StationMap";
+import { CardSkeleton, ChartSkeleton } from "./ui";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
+import { relativeTime } from "@/lib/time";
 
 export default function Dashboard({ stationId }: { stationId: string }) {
   const [station, setStation] = useState<Station | null>(null);
@@ -17,6 +19,8 @@ export default function Dashboard({ stationId }: { stationId: string }) {
   const [range, setRange] = useState<TimeRange>("24h");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [flash, setFlash] = useState(false);
+  const lastObservedRef = useRef<string | null>(null);
 
   useEffect(() => {
     fetch("/api/stations")
@@ -40,6 +44,13 @@ export default function Dashboard({ stationId }: { stationId: string }) {
       setError(null);
       setMode(json.mode);
       setLatest(json.latest);
+      // Flash the freshness indicator when a genuinely new reading arrives.
+      const obs = json.latest?.observed_at ?? null;
+      if (obs && lastObservedRef.current && obs !== lastObservedRef.current) {
+        setFlash(true);
+        setTimeout(() => setFlash(false), 1200);
+      }
+      lastObservedRef.current = obs;
       if (json.mode === "daily") {
         setDaily(json.data as DailyReading[]);
         setReadings([]);
@@ -58,8 +69,6 @@ export default function Dashboard({ stationId }: { stationId: string }) {
     setLoading(true);
     fetchReadings();
 
-    // Refresh the moment a new reading is inserted for this station, with a
-    // slow fallback poll in case the realtime socket drops.
     const channel = supabaseBrowser
       .channel(`readings-${stationId}`)
       .on(
@@ -83,23 +92,51 @@ export default function Dashboard({ stationId }: { stationId: string }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <a href="/" className="text-gray-400 hover:text-gray-600">←</a>
-          <h1 className="text-2xl font-bold">{station?.name ?? "Loading..."}</h1>
-          {station && (
-            <span className="text-sm text-gray-400">
-              {station.source === "weathercloud" ? `Weathercloud: ${station.source_id}` : station.wunderground_id}
-            </span>
-          )}
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+        <div className="min-w-0">
+          <a
+            href="/"
+            className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800 transition-colors mb-1"
+          >
+            <span aria-hidden="true">←</span> All stations
+          </a>
+          <h1 className="text-2xl font-semibold text-slate-900 truncate">
+            {station?.name ?? "…"}
+          </h1>
+          <div className="flex items-center gap-2 mt-1 text-sm text-slate-500">
+            {station && (
+              <span>
+                {station.source === "weathercloud" ? `Weathercloud · ${station.source_id}` : station.wunderground_id}
+              </span>
+            )}
+            {latest && (
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 ${flash ? "ws-flash" : ""}`}
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                </span>
+                Updated {relativeTime(latest.observed_at)}
+              </span>
+            )}
+          </div>
         </div>
         <TimeRangeSelector selected={range} onSelect={setRange} />
       </div>
 
       {loading ? (
-        <div className="text-center py-12 text-gray-500">Loading...</div>
+        <div className="space-y-5">
+          <CardSkeleton />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ChartSkeleton />
+            <ChartSkeleton />
+          </div>
+        </div>
       ) : error ? (
-        <div className="text-center py-12 text-red-500">{error}</div>
+        <div className="bg-white rounded-xl p-8 border border-slate-200 text-center text-red-600">
+          {error}
+        </div>
       ) : (
         <>
           <CurrentConditions reading={latest} />

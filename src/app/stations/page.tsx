@@ -2,6 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { Station } from "@/lib/types";
+import { Toast, ConfirmDialog } from "@/components/ui";
+
+const HINTS: Record<string, string> = {
+  wunderground: "Station ID from wunderground.com, e.g. IKINGS664",
+  weathercloud: "Device ID (e.g. 3326837048) or a 4-letter airport code (e.g. CYZE)",
+};
 
 export default function StationsPage() {
   const [stations, setStations] = useState<Station[]>([]);
@@ -14,6 +20,8 @@ export default function StationsPage() {
   const [authenticated, setAuthenticated] = useState(false);
   const [authError, setAuthError] = useState("");
   const [verifying, setVerifying] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Station | null>(null);
 
   const fetchStations = () => {
     fetch("/api/stations")
@@ -35,11 +43,8 @@ export default function StationsPage() {
         method: "POST",
         headers: { "x-admin-secret": password },
       });
-      if (res.ok) {
-        setAuthenticated(true);
-      } else {
-        setAuthError("Incorrect password");
-      }
+      if (res.ok) setAuthenticated(true);
+      else setAuthError("Incorrect password");
     } catch {
       setAuthError("Could not verify password");
     } finally {
@@ -47,26 +52,22 @@ export default function StationsPage() {
     }
   };
 
-  const authHeaders = {
-    "Content-Type": "application/json",
-    "x-admin-secret": password,
-  };
+  const authHeaders = { "Content-Type": "application/json", "x-admin-secret": password };
 
   const addStation = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setAdding(true);
-
     const res = await fetch("/api/stations", {
       method: "POST",
       headers: authHeaders,
       body: JSON.stringify({ name, source, station_id: stationId }),
     });
-
     if (!res.ok) {
       const data = await res.json();
       setError(data.error || "Failed to add station");
     } else {
+      setToast(`Added ${name}`);
       setName("");
       setStationId("");
       fetchStations();
@@ -74,134 +75,153 @@ export default function StationsPage() {
     setAdding(false);
   };
 
-  const deleteStation = async (id: string) => {
-    if (!confirm("Remove this station?")) return;
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    const station = pendingDelete;
+    setPendingDelete(null);
     const res = await fetch("/api/stations", {
       method: "DELETE",
       headers: authHeaders,
-      body: JSON.stringify({ id }),
+      body: JSON.stringify({ id: station.id }),
     });
-    if (res.ok) fetchStations();
+    if (res.ok) {
+      setToast(`Removed ${station.name}`);
+      fetchStations();
+    }
   };
+
+  const inputClass =
+    "w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-sky-200 focus:border-sky-400";
 
   if (!authenticated) {
     return (
-      <main className="min-h-screen bg-gray-50 text-gray-900">
-        <div className="max-w-sm mx-auto px-4 py-24">
-          <h1 className="text-2xl font-bold mb-6 text-center">Manage Stations</h1>
-          <form
-            onSubmit={verifyPassword}
-            className="bg-white rounded-xl p-6 shadow-sm border border-gray-100"
+      <main className="max-w-sm mx-auto px-4 py-20 w-full">
+        <h1 className="text-xl font-semibold text-slate-900 mb-6 text-center">Manage stations</h1>
+        <form onSubmit={verifyPassword} className="bg-white rounded-xl p-6 border border-slate-200">
+          <label htmlFor="admin-pw" className="block text-sm text-slate-600 mb-2">
+            Admin password
+          </label>
+          <input
+            id="admin-pw"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            className={`${inputClass} mb-4`}
+          />
+          <button
+            type="submit"
+            disabled={verifying}
+            className="w-full px-4 py-2 bg-sky-600 text-white rounded-lg text-sm font-medium hover:bg-sky-700 disabled:opacity-50"
           >
-            <label className="block text-sm text-gray-500 mb-2">Admin password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm mb-4"
-            />
-            <button
-              type="submit"
-              disabled={verifying}
-              className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-            >
-              {verifying ? "Checking..." : "Continue"}
-            </button>
-            {authError && <p className="text-red-500 text-sm mt-3 text-center">{authError}</p>}
-          </form>
-          <div className="text-center mt-4">
-            <a href="/" className="text-sm text-blue-600 hover:text-blue-800">
-              ← Home
-            </a>
-          </div>
-        </div>
+            {verifying ? "Checking…" : "Continue"}
+          </button>
+          {authError && <p className="text-red-600 text-sm mt-3 text-center">{authError}</p>}
+        </form>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 text-gray-900">
-      <div className="max-w-2xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">Manage Stations</h1>
-          <a href="/" className="text-sm text-blue-600 hover:text-blue-800">
-            ← Home
-          </a>
-        </div>
+    <main className="max-w-2xl mx-auto px-4 py-8 w-full">
+      <h1 className="text-2xl font-semibold text-slate-900 mb-6">Manage stations</h1>
 
-        <form onSubmit={addStation} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 mb-6">
-          <h2 className="font-medium mb-3">Add Station</h2>
-          <div className="flex flex-col gap-3">
-            <div className="flex gap-3">
-              <select
-                value={source}
-                onChange={(e) => setSource(e.target.value as "wunderground" | "weathercloud")}
-                className="px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm"
-              >
-                <option value="wunderground">Weather Underground</option>
-                <option value="weathercloud">Weathercloud</option>
-              </select>
-              <input
-                type="text"
-                placeholder="Station name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                className="flex-1 px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm"
-              />
-            </div>
-            <div className="flex gap-3">
-              <input
-                type="text"
-                placeholder={source === "wunderground" ? "Wunderground ID (e.g. KLAX123)" : "Weathercloud device ID (e.g. 3326837048)"}
-                value={stationId}
-                onChange={(e) => setStationId(e.target.value)}
-                required
-                className="flex-1 px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm"
-              />
-              <button
-                type="submit"
-                disabled={adding}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-              >
-                {adding ? "Adding..." : "Add"}
-              </button>
-            </div>
-          </div>
-          {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
-        </form>
-
-        <div className="space-y-3">
-          {stations.map((s) => (
-            <div
-              key={s.id}
-              className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex items-center justify-between"
+      <form onSubmit={addStation} className="bg-white rounded-xl p-5 border border-slate-200 mb-8">
+        <h2 className="font-medium text-slate-800 mb-4">Add a station</h2>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Source</label>
+            <select
+              value={source}
+              onChange={(e) => setSource(e.target.value as "wunderground" | "weathercloud")}
+              className={inputClass}
             >
-              <div>
-                <div className="font-medium">
-                  {s.name}
-                  {s.is_primary && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Primary</span>}
-                </div>
-                <div className="text-sm text-gray-500">
-                  {s.source === "weathercloud" ? `Weathercloud: ${s.source_id}` : s.wunderground_id}
-                </div>
-                {s.latitude && s.longitude && (
-                  <div className="text-xs text-gray-400">{s.latitude.toFixed(4)}, {s.longitude.toFixed(4)}</div>
+              <option value="wunderground">Weather Underground</option>
+              <option value="weathercloud">Weathercloud</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Display name</label>
+            <input
+              type="text"
+              placeholder="e.g. Kingston"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              className={inputClass}
+            />
+          </div>
+        </div>
+        <div className="mt-4">
+          <label className="block text-xs font-medium text-slate-500 mb-1">Station ID</label>
+          <input
+            type="text"
+            value={stationId}
+            onChange={(e) => setStationId(e.target.value)}
+            required
+            className={inputClass}
+          />
+          <p className="text-xs text-slate-400 mt-1">{HINTS[source]}</p>
+        </div>
+        <div className="flex items-center gap-3 mt-4">
+          <button
+            type="submit"
+            disabled={adding}
+            className="px-4 py-2 bg-sky-600 text-white rounded-lg text-sm font-medium hover:bg-sky-700 disabled:opacity-50"
+          >
+            {adding ? "Adding…" : "Add station"}
+          </button>
+          {error && <p className="text-red-600 text-sm">{error}</p>}
+        </div>
+      </form>
+
+      <div className="space-y-3">
+        {stations.map((s) => (
+          <div
+            key={s.id}
+            className="bg-white rounded-xl p-4 border border-slate-200 flex items-center justify-between"
+          >
+            <div className="min-w-0">
+              <div className="font-medium text-slate-900 flex items-center gap-2">
+                <span className="truncate">{s.name}</span>
+                {s.is_primary && (
+                  <span className="text-xs bg-sky-50 text-sky-700 px-2 py-0.5 rounded-full shrink-0">
+                    Primary
+                  </span>
                 )}
               </div>
-              {!s.is_primary && (
-                <button
-                  onClick={() => deleteStation(s.id)}
-                  className="text-sm text-red-500 hover:text-red-700"
-                >
-                  Remove
-                </button>
+              <div className="text-sm text-slate-500">
+                {s.source === "weathercloud" ? `Weathercloud · ${s.source_id}` : s.wunderground_id}
+              </div>
+              {s.latitude && s.longitude && (
+                <div className="text-xs text-slate-400">
+                  {s.latitude.toFixed(4)}, {s.longitude.toFixed(4)}
+                </div>
               )}
             </div>
-          ))}
-        </div>
+            {s.is_primary ? (
+              <span className="text-xs text-slate-400">Can’t remove</span>
+            ) : (
+              <button
+                onClick={() => setPendingDelete(s)}
+                className="text-sm text-red-600 hover:text-red-700"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        ))}
       </div>
+
+      {pendingDelete && (
+        <ConfirmDialog
+          message={`Remove ${pendingDelete.name}? Its stored history will be deleted.`}
+          confirmLabel="Remove"
+          onConfirm={confirmDelete}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
+      {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
     </main>
   );
 }

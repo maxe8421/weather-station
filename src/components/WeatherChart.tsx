@@ -37,8 +37,8 @@ interface ChartsProps {
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-      <h3 className="font-medium mb-3">{title}</h3>
+    <div className="bg-white rounded-xl p-4 border border-slate-200">
+      <h3 className="font-medium text-slate-800 mb-3">{title}</h3>
       {children}
     </div>
   );
@@ -47,8 +47,8 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 function NoData({ title }: { title: string }) {
   return (
     <Panel title={title}>
-      <div className="h-[250px] flex items-center justify-center text-sm text-gray-400">
-        No data for this metric
+      <div className="h-[250px] flex items-center justify-center text-sm text-slate-400">
+        This station doesn’t report {title.toLowerCase()}
       </div>
     </Panel>
   );
@@ -62,7 +62,11 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
   const isDaily = mode === "daily";
   const hasAny = isDaily ? daily.length > 0 : readings.length > 0;
   if (!hasAny) {
-    return <div className="text-gray-500 text-center py-8">No data for this time range</div>;
+    return (
+      <div className="bg-white rounded-xl p-10 border border-slate-200 text-center text-slate-500">
+        No history for this range yet — data builds up over time.
+      </div>
+    );
   }
 
   const tempSummaryMode = range === "30d" || range === "1y" || range === "all";

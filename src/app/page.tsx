@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { Station } from "@/lib/types";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
+import { CardSkeleton } from "@/components/ui";
+import { relativeTime } from "@/lib/time";
 
 interface StationWithLatest extends Station {
   latest: {
@@ -15,6 +17,24 @@ interface StationWithLatest extends Station {
   avg_wind_kph: number | null;
 }
 
+function Stat({ label, value, unit }: { label: string; value: number | null; unit?: string }) {
+  return (
+    <div>
+      <div className="text-xs text-slate-500 mb-0.5">{label}</div>
+      <div className="text-lg font-semibold text-slate-800">
+        {value !== null ? (
+          <>
+            {value}
+            {unit && <span className="text-xs font-normal text-slate-400 ml-0.5">{unit}</span>}
+          </>
+        ) : (
+          <span className="text-slate-300">—</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const [stations, setStations] = useState<StationWithLatest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,16 +44,12 @@ export default function Home() {
       fetch("/api/latest")
         .then((r) => r.json())
         .then((data) => {
-          // Guard against error-shaped responses ({error: ...}) so a transient
-          // API failure renders an empty state instead of crashing on .map().
           if (Array.isArray(data)) setStations(data);
         })
         .catch(() => {})
         .finally(() => setLoading(false));
     load();
 
-    // Refresh when any station receives a new reading, with a slow fallback
-    // poll in case the realtime socket drops.
     const channel = supabaseBrowser
       .channel("home-readings")
       .on(
@@ -51,101 +67,88 @@ export default function Home() {
   }, []);
 
   return (
-    <main className="min-h-screen bg-gray-50 text-gray-900">
-      <div className="max-w-5xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-bold">Weather Stations</h1>
-          <a
-            href="/stations"
-            className="text-sm text-blue-600 hover:text-blue-800"
-          >
-            Manage Stations
+    <main className="max-w-5xl mx-auto px-4 py-8 w-full">
+      <h1 className="text-2xl font-semibold text-slate-900 mb-6">Stations</h1>
+
+      {loading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <CardSkeleton />
+          <CardSkeleton />
+          <CardSkeleton />
+        </div>
+      ) : stations.length === 0 ? (
+        <div className="bg-white rounded-xl p-10 border border-slate-200 text-center">
+          <p className="text-slate-600">No stations yet.</p>
+          <a href="/stations" className="text-sky-600 hover:text-sky-700 text-sm mt-2 inline-block">
+            Add your first station →
           </a>
         </div>
-
-        {loading ? (
-          <div className="text-center py-12 text-gray-500">Loading...</div>
-        ) : stations.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">No stations added yet</div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {stations.map((s) => (
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {stations.map((s) => {
+            const stale =
+              s.latest &&
+              (Date.now() - new Date(s.latest.observed_at).getTime()) / 60000 >
+                (s.source === "weathercloud" ? 120 : 30);
+            return (
               <a
                 key={s.id}
                 href={`/station/${s.id}`}
-                className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:border-blue-300 transition-colors"
+                className="group bg-white rounded-xl p-5 border border-slate-200 hover:border-sky-300 hover:shadow-sm transition-all"
               >
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <div className="font-semibold text-lg">{s.name}</div>
-                    <div className="text-xs text-gray-400">{s.wunderground_id}</div>
+                <div className="flex items-start justify-between mb-4">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-slate-900 truncate">{s.name}</span>
+                      {s.is_primary && (
+                        <span className="text-xs bg-sky-50 text-sky-700 px-2 py-0.5 rounded-full shrink-0">
+                          Primary
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-slate-400 mt-0.5">
+                      {s.source === "weathercloud" ? s.source_id : s.wunderground_id}
+                    </div>
                   </div>
-                  {s.is_primary && (
-                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
-                      Primary
-                    </span>
-                  )}
+                  <span className="text-slate-300 group-hover:text-sky-400 transition-colors text-lg leading-none">
+                    ›
+                  </span>
                 </div>
 
                 {s.latest ? (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <div className="text-xs text-gray-400 mb-1">Outdoor</div>
-                      <div className="text-xl font-semibold">
+                  <>
+                    <div className="flex items-end justify-between">
+                      <div className="text-4xl font-semibold tracking-tight text-slate-900 leading-none">
                         {s.latest.temp_c !== null ? `${s.latest.temp_c}°` : "—"}
                       </div>
-                    </div>
-                    {s.latest.temp_indoor_c !== null && (
-                      <div>
-                        <div className="text-xs text-gray-400 mb-1">Indoor</div>
-                        <div className="text-xl font-semibold">
-                          {`${s.latest.temp_indoor_c}°`}
+                      {s.latest.temp_indoor_c !== null && (
+                        <div className="text-xs text-slate-500 pb-1">
+                          Indoor <span className="font-medium text-slate-700">{s.latest.temp_indoor_c}°</span>
                         </div>
-                      </div>
-                    )}
-                    <div>
-                      <div className="text-xs text-gray-400 mb-1">Wind (1hr avg)</div>
-                      <div className="text-xl font-semibold">
-                        {s.avg_wind_kph !== null ? (
-                          <>
-                            {s.avg_wind_kph}
-                            <span className="text-xs font-normal text-gray-400 ml-0.5">km/h</span>
-                          </>
-                        ) : "—"}
-                      </div>
+                      )}
                     </div>
-                    <div>
-                      <div className="text-xs text-gray-400 mb-1">Rain</div>
-                      <div className="text-xl font-semibold">
-                        {s.latest.precip_total_mm !== null ? (
-                          <>
-                            {s.latest.precip_total_mm}
-                            <span className="text-xs font-normal text-gray-400 ml-0.5">mm</span>
-                          </>
-                        ) : "—"}
-                      </div>
+                    <div className="grid grid-cols-2 gap-3 mt-4">
+                      <Stat label="Wind (1 hr avg)" value={s.avg_wind_kph} unit="km/h" />
+                      <Stat label="Rain today" value={s.latest.precip_total_mm} unit="mm" />
                     </div>
-                  </div>
+                    <div
+                      className={`text-xs mt-4 flex items-center gap-1.5 ${
+                        stale ? "text-amber-600" : "text-slate-400"
+                      }`}
+                    >
+                      {stale && <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500" />}
+                      {stale ? "Stale · " : ""}
+                      {relativeTime(s.latest.observed_at)}
+                    </div>
+                  </>
                 ) : (
-                  <div className="text-sm text-gray-400">No data yet</div>
+                  <div className="text-sm text-slate-400 py-4">No data yet</div>
                 )}
-
-                {s.latest && (() => {
-                  const ageMins = (Date.now() - new Date(s.latest.observed_at).getTime()) / 60000;
-                  const staleAfter = s.source === "weathercloud" ? 120 : 30;
-                  const isStale = ageMins > staleAfter;
-                  return (
-                    <div className={`text-xs mt-3 flex items-center gap-1.5 ${isStale ? "text-amber-600" : "text-gray-400"}`}>
-                      {isStale && <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500" />}
-                      {isStale ? "Stale · " : ""}{new Date(s.latest.observed_at).toLocaleString()}
-                    </div>
-                  );
-                })()}
               </a>
-            ))}
-          </div>
-        )}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </main>
   );
 }
