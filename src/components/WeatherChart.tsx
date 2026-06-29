@@ -5,9 +5,8 @@ import {
   ResponsiveContainer, Legend, ScatterChart, Scatter, ZAxis,
 } from "recharts";
 import { WeatherReading, TimeRange } from "@/lib/types";
-import { formatTime, aggregateDaily, windDirToCompass } from "@/lib/utils";
+import { formatTime, aggregateDaily, aggregateReadings, windDirToCompass } from "@/lib/utils";
 
-// Improved colour palette — higher contrast, distinct hues
 const COLORS = {
   red: "#dc2626",
   orange: "#ea580c",
@@ -20,6 +19,10 @@ const COLORS = {
   pink: "#db2777",
   sky: "#0284c7",
 };
+
+const TOOLTIP_STYLE = { borderRadius: "8px", border: "1px solid #e5e7eb" };
+const GRID_COLOR = "#d1d5db";
+const TICK_STYLE = { fill: "#6b7280" };
 
 interface ChartConfig {
   title: string;
@@ -75,14 +78,14 @@ function SingleChart({ config, readings, range }: { config: ChartConfig; reading
   if (showDailyAgg && config.aggregateField) {
     const daily = aggregateDaily(readings, config.aggregateField);
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700">
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
         <h3 className="font-medium mb-3">{config.title} (Daily Summary)</h3>
         <ResponsiveContainer width="100%" height={250}>
           <LineChart data={daily}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#d1d5db" />
-            <XAxis dataKey="date" fontSize={12} tick={{ fill: "#6b7280" }} />
-            <YAxis fontSize={12} tick={{ fill: "#6b7280" }} />
-            <Tooltip contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb" }} />
+            <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
+            <XAxis dataKey="date" fontSize={12} tick={TICK_STYLE} />
+            <YAxis fontSize={12} tick={TICK_STYLE} />
+            <Tooltip contentStyle={TOOLTIP_STYLE} />
             <Legend />
             <Line type="monotone" dataKey="max" name="Max" stroke={COLORS.red} dot={false} strokeWidth={1.5} />
             <Line type="monotone" dataKey="avg" name="Avg" stroke={COLORS.orange} dot={false} strokeWidth={2} />
@@ -93,20 +96,25 @@ function SingleChart({ config, readings, range }: { config: ChartConfig; reading
     );
   }
 
-  const chartData = readings.map((r) => ({
-    time: formatTime(r.observed_at, range),
-    ...Object.fromEntries(config.fields.map((f) => [f.label, r[f.key]])),
-  }));
+  const fieldKeys = config.fields.map((f) => f.key);
+  const aggregated = aggregateReadings(readings, fieldKeys, range);
+  const chartData = aggregated.map((p) => {
+    const point: Record<string, unknown> = { time: p.label };
+    for (const f of config.fields) {
+      point[f.label] = p[f.key as string];
+    }
+    return point;
+  });
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700">
+    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
       <h3 className="font-medium mb-3">{config.title}</h3>
       <ResponsiveContainer width="100%" height={250}>
         <LineChart data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#d1d5db" />
-          <XAxis dataKey="time" fontSize={12} tick={{ fill: "#6b7280" }} />
-          <YAxis fontSize={12} tick={{ fill: "#6b7280" }} unit={config.unit ? ` ${config.unit}` : undefined} />
-          <Tooltip contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb" }} />
+          <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
+          <XAxis dataKey="time" fontSize={12} tick={TICK_STYLE} />
+          <YAxis fontSize={12} tick={TICK_STYLE} unit={config.unit ? ` ${config.unit}` : undefined} />
+          <Tooltip contentStyle={TOOLTIP_STYLE} />
           <Legend />
           {config.fields.map((f) => (
             <Line key={f.key} type="monotone" dataKey={f.label} stroke={f.color} dot={false} strokeWidth={2} />
@@ -118,64 +126,101 @@ function SingleChart({ config, readings, range }: { config: ChartConfig; reading
 }
 
 function WindDirectionChart({ readings, range }: { readings: WeatherReading[]; range: TimeRange }) {
-  const data = readings
-    .filter((r) => r.wind_dir !== null)
-    .map((r) => ({
-      time: formatTime(r.observed_at, range),
-      direction: r.wind_dir,
-      speed: r.wind_speed_kph ?? 0,
-      label: windDirToCompass(r.wind_dir),
+  if (range === "24h") {
+    const data = readings
+      .filter((r) => r.wind_dir !== null)
+      .map((r) => ({
+        time: formatTime(r.observed_at, range),
+        direction: r.wind_dir,
+        speed: r.wind_speed_kph ?? 0,
+      }));
+
+    if (data.length === 0) return null;
+
+    return (
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+        <h3 className="font-medium mb-3">Wind Direction</h3>
+        <ResponsiveContainer width="100%" height={250}>
+          <ScatterChart>
+            <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
+            <XAxis dataKey="time" fontSize={12} tick={TICK_STYLE} name="Time" />
+            <YAxis
+              dataKey="direction"
+              fontSize={12}
+              tick={TICK_STYLE}
+              domain={[0, 360]}
+              ticks={[0, 90, 180, 270, 360]}
+              tickFormatter={(v: number) => ["N", "E", "S", "W", "N"][v / 90]}
+            />
+            <ZAxis dataKey="speed" range={[20, 200]} name="Speed (km/h)" />
+            <Tooltip
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              formatter={(value: any, name: any) => {
+                if (name === "Direction") return [`${value}° ${windDirToCompass(Number(value))}`, name];
+                return [value, name];
+              }}
+              contentStyle={TOOLTIP_STYLE}
+            />
+            <Scatter data={data} fill={COLORS.green} opacity={0.7} />
+          </ScatterChart>
+        </ResponsiveContainer>
+        <div className="text-xs text-gray-400 mt-1 text-center">Dot size = wind speed</div>
+      </div>
+    );
+  }
+
+  const aggregated = aggregateReadings(readings, ["wind_dir"], range);
+  const data = aggregated
+    .filter((p) => p.wind_dir !== null)
+    .map((p) => ({
+      time: p.label,
+      direction: p.wind_dir as number,
+      compass: windDirToCompass(p.wind_dir as number),
     }));
 
   if (data.length === 0) return null;
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700">
-      <h3 className="font-medium mb-3">Wind Direction</h3>
+    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+      <h3 className="font-medium mb-3">Wind Direction (Average)</h3>
       <ResponsiveContainer width="100%" height={250}>
-        <ScatterChart>
-          <CartesianGrid strokeDasharray="3 3" stroke="#d1d5db" />
-          <XAxis dataKey="time" fontSize={12} tick={{ fill: "#6b7280" }} name="Time" />
+        <LineChart data={data}>
+          <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
+          <XAxis dataKey="time" fontSize={12} tick={TICK_STYLE} />
           <YAxis
-            dataKey="direction"
             fontSize={12}
-            tick={{ fill: "#6b7280" }}
+            tick={TICK_STYLE}
             domain={[0, 360]}
             ticks={[0, 90, 180, 270, 360]}
             tickFormatter={(v: number) => ["N", "E", "S", "W", "N"][v / 90]}
-            name="Direction"
           />
-          <ZAxis dataKey="speed" range={[20, 200]} name="Speed (km/h)" />
           <Tooltip
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            formatter={(value: any, name: any) => {
-              if (name === "Direction") return [`${value}° ${windDirToCompass(Number(value))}`, name];
-              return [value, name];
-            }}
-            contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb" }}
+            formatter={(value: any) => [`${value}° ${windDirToCompass(Number(value))}`, "Direction"]}
+            contentStyle={TOOLTIP_STYLE}
           />
-          <Scatter data={data} fill={COLORS.green} opacity={0.7} />
-        </ScatterChart>
+          <Line type="stepAfter" dataKey="direction" stroke={COLORS.green} dot={false} strokeWidth={2} />
+        </LineChart>
       </ResponsiveContainer>
-      <div className="text-xs text-gray-400 mt-1 text-center">Dot size = wind speed</div>
     </div>
   );
 }
 
 function UVChart({ readings, range }: { readings: WeatherReading[]; range: TimeRange }) {
-  const chartData = readings.map((r) => ({
-    time: formatTime(r.observed_at, range),
-    "UV Index": r.uv,
-    "Solar Radiation": r.solar_radiation,
+  const aggregated = aggregateReadings(readings, ["uv", "solar_radiation"], range);
+  const chartData = aggregated.map((p) => ({
+    time: p.label,
+    "UV Index": p.uv,
+    "Solar Radiation": p.solar_radiation,
   }));
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700">
+    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
       <h3 className="font-medium mb-3">UV & Solar Radiation</h3>
       <ResponsiveContainer width="100%" height={250}>
         <LineChart data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#d1d5db" />
-          <XAxis dataKey="time" fontSize={12} tick={{ fill: "#6b7280" }} />
+          <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
+          <XAxis dataKey="time" fontSize={12} tick={TICK_STYLE} />
           <YAxis
             yAxisId="uv"
             fontSize={12}
@@ -189,7 +234,7 @@ function UVChart({ readings, range }: { readings: WeatherReading[]; range: TimeR
             tick={{ fill: COLORS.pink }}
             label={{ value: "W/m²", angle: 90, position: "insideRight", style: { fill: COLORS.pink, fontSize: 11 } }}
           />
-          <Tooltip contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb" }} />
+          <Tooltip contentStyle={TOOLTIP_STYLE} />
           <Legend />
           <Line yAxisId="uv" type="monotone" dataKey="UV Index" stroke={COLORS.amber} dot={false} strokeWidth={2} />
           <Line yAxisId="solar" type="monotone" dataKey="Solar Radiation" stroke={COLORS.pink} dot={false} strokeWidth={2} />
