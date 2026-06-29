@@ -7,10 +7,18 @@ import CurrentConditions from "./CurrentConditions";
 import WeatherCharts from "./WeatherChart";
 import StationMap from "./StationMap";
 import Comparison from "./Comparison";
-import { CardSkeleton, ChartSkeleton } from "./ui";
+import { CardSkeleton, ChartSkeleton, SummaryCard } from "./ui";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
 import { relativeTime, localTime, dayBounds, weekBounds, windowLabel, toYmd } from "@/lib/time";
-import { summarizePeriod } from "@/lib/summary";
+import { summarizePeriod, summarizeDaily } from "@/lib/summary";
+
+const RANGE_LABEL: Record<string, string> = {
+  "24h": "the last 24 hours",
+  "7d": "the last 7 days",
+  "30d": "the last 30 days",
+  "1y": "the last year",
+  all: "all time",
+};
 
 type CustomKind = "day" | "week";
 
@@ -251,20 +259,19 @@ export default function Dashboard({ stationId }: { stationId: string }) {
           <div className="bg-white rounded-xl px-5 py-3 border border-slate-200 text-slate-700">
             Showing <span className="font-medium text-slate-900">{windowLabel(customDate, customKind)}</span>
           </div>
-          {(() => {
-            const lines = summarizePeriod(readings, windowLabel(customDate, customKind));
-            return lines.length ? (
-              <div className="bg-sky-50 border border-sky-100 rounded-xl p-4">
-                <h3 className="text-sm font-medium text-sky-800 mb-1">Summary</h3>
-                <p className="text-sm text-slate-700 leading-relaxed">{lines.join(" ")}</p>
-              </div>
-            ) : null;
-          })()}
+          <SummaryCard lines={summarizePeriod(readings, windowLabel(customDate, customKind))} />
           <WeatherCharts mode={mode} readings={readings} daily={daily} range={chartRange} />
         </>
       ) : (
         <>
           <CurrentConditions reading={latest} />
+          <SummaryCard
+            lines={
+              mode === "daily"
+                ? summarizeDaily(daily, RANGE_LABEL[range] ?? "this period")
+                : summarizePeriod(readings, RANGE_LABEL[range] ?? "this period")
+            }
+          />
           {station && station.latitude !== null && station.longitude !== null && (
             <StationMap latitude={station.latitude} longitude={station.longitude} name={station.name} />
           )}

@@ -28,6 +28,8 @@ export function summarizeComparison(
         ? `about the same temperature as ${bLabel}`
         : `${Math.abs(d)}°C ${d > 0 ? "warmer" : "cooler"} than ${bLabel}`;
     out.push(`${aLabel} averaged ${r1(ta)}°C — ${phrase} (${r1(tb)}°C).`);
+  } else if (ta !== null) {
+    out.push(`${aLabel} averaged ${r1(ta)}°C (no comparison data for ${bLabel} yet).`);
   }
 
   const ra = sum(a.map((r) => r.precip_total_mm));
@@ -37,6 +39,8 @@ export function summarizeComparison(
     const phrase =
       Math.abs(diff) < 0.5 ? "a similar amount" : `${Math.abs(diff)} mm ${diff > 0 ? "more" : "less"}`;
     out.push(`Rainfall totalled ${r1(ra)} mm vs ${r1(rb)} mm — ${phrase}.`);
+  } else if (a.length) {
+    out.push(`Rainfall totalled ${r1(ra)} mm.`);
   }
 
   const wa = mean(a.map((r) => r.wind_speed_kph));
@@ -45,6 +49,32 @@ export function summarizeComparison(
     const d = r1(wa - wb);
     const phrase = Math.abs(d) < 0.5 ? "similar winds" : `${d > 0 ? "windier" : "calmer"} on average`;
     out.push(`Average wind ${r1(wa)} km/h vs ${r1(wb)} km/h — ${phrase}.`);
+  }
+
+  return out;
+}
+
+/** Plain-English summary of a window of daily aggregates (30d / 1y / all). */
+export function summarizeDaily(series: DailyReading[], label: string): string[] {
+  if (series.length === 0) return [];
+  const out: string[] = [];
+
+  const avg = mean(series.map((r) => r.temp_avg));
+  if (avg !== null) {
+    const warm = series.reduce((m, r) => (r.temp_max !== null && (m.temp_max ?? -Infinity) < r.temp_max ? r : m));
+    const cold = series.reduce((m, r) => (r.temp_min !== null && (m.temp_min ?? Infinity) > r.temp_min ? r : m));
+    out.push(
+      `Averaged ${r1(avg)}°C over ${label}. Warmest ${warm.temp_max}°C (${fmtDay(warm.day)}), coldest ${cold.temp_min}°C (${fmtDay(cold.day)}).`
+    );
+  }
+
+  const rainTotal = r1(sum(series.map((r) => r.precip_total_mm)));
+  const wet = series.filter((r) => (r.precip_total_mm ?? 0) > 0.2).length;
+  out.push(wet === 0 ? "No measurable rain." : `${rainTotal} mm of rain across ${wet} day${wet === 1 ? "" : "s"}.`);
+
+  const gust = series.reduce((m, r) => (r.wind_gust_kph !== null && (m.wind_gust_kph ?? -Infinity) < r.wind_gust_kph ? r : m));
+  if (gust.wind_gust_kph !== null) {
+    out.push(`Windiest day peaked at ${r1(gust.wind_gust_kph)} km/h (${fmtDay(gust.day)}).`);
   }
 
   return out;

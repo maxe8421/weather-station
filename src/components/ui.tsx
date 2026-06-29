@@ -29,6 +29,16 @@ export function ChartSkeleton() {
   );
 }
 
+export function SummaryCard({ lines }: { lines: string[] }) {
+  if (!lines.length) return null;
+  return (
+    <div className="bg-sky-50 border border-sky-100 rounded-xl p-4">
+      <h3 className="text-sm font-medium text-sky-800 mb-1">Summary</h3>
+      <p className="text-sm text-slate-700 leading-relaxed">{lines.join(" ")}</p>
+    </div>
+  );
+}
+
 export function Toast({ message, onDismiss }: { message: string; onDismiss: () => void }) {
   useEffect(() => {
     const t = setTimeout(onDismiss, 3000);
