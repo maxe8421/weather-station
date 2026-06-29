@@ -158,17 +158,16 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
         </Panel>
       );
     }
-    return (
-      <LineCard
-        title={title}
-        unit="°C"
-        fields={[
-          { key: "temp_c", label: "Outdoor", color: COLORS.red },
-          { key: "temp_indoor_c", label: "Indoor", color: COLORS.orange },
-          { key: "dewpoint_c", label: "Dew Point", color: COLORS.blue },
-        ]}
-      />
-    );
+    // Only show the Indoor series when this station actually reports indoor temps.
+    const hasIndoor = readings.some((r) => r.temp_indoor_c !== null);
+    const fields: FieldDef[] = [
+      { key: "temp_c", label: "Outdoor", color: COLORS.red },
+      ...(hasIndoor
+        ? [{ key: "temp_indoor_c" as keyof WeatherReading, label: "Indoor", color: COLORS.orange }]
+        : []),
+      { key: "dewpoint_c", label: "Dew Point", color: COLORS.blue },
+    ];
+    return <LineCard title={title} unit="°C" fields={fields} />;
   }
 
   function WindDirectionCard() {
