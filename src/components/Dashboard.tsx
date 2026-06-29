@@ -9,7 +9,7 @@ import StationMap from "./StationMap";
 import Comparison from "./Comparison";
 import { CardSkeleton, ChartSkeleton } from "./ui";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
-import { relativeTime, localTime, dayBounds, weekBounds, windowLabel } from "@/lib/time";
+import { relativeTime, localTime, dayBounds, weekBounds, windowLabel, toYmd } from "@/lib/time";
 import { summarizePeriod } from "@/lib/summary";
 
 type CustomKind = "day" | "week";
@@ -24,6 +24,7 @@ export default function Dashboard({ stationId }: { stationId: string }) {
   const [customDate, setCustomDate] = useState<string | null>(null);
   const [customKind, setCustomKind] = useState<CustomKind>("day");
   const [compareMode, setCompareMode] = useState(false);
+  const [dataRange, setDataRange] = useState<{ min: string; max: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
@@ -46,6 +47,13 @@ export default function Dashboard({ stationId }: { stationId: string }) {
         if (Array.isArray(data)) {
           setStation((data as Station[]).find((s) => s.id === stationId) ?? null);
         }
+      })
+      .catch(() => {});
+
+    fetch(`/api/data-range?station_id=${stationId}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.min && d?.max) setDataRange({ min: d.min, max: d.max });
       })
       .catch(() => {});
   }, [stationId]);
@@ -118,8 +126,14 @@ export default function Dashboard({ stationId }: { stationId: string }) {
     setRange(r);
   };
 
-  const todayStr = now.toISOString().slice(0, 10);
-  const minStr = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  // Bound the picker to dates we actually have data for, never earlier than the
+  // 90-day raw-retention floor.
+  const retentionFloor = toYmd(new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000));
+  const dataMin = dataRange ? toYmd(new Date(dataRange.min)) : null;
+  const dataMax = dataRange ? toYmd(new Date(dataRange.max)) : null;
+  const pickerMin = dataMin && dataMin > retentionFloor ? dataMin : retentionFloor;
+  const pickerMax = dataMax ?? toYmd(now);
+  const pickerDisabled = !dataRange;
   const dateInputClass =
     "px-3 py-1.5 border border-slate-200 rounded-lg bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-200";
 
@@ -173,11 +187,13 @@ export default function Dashboard({ stationId }: { stationId: string }) {
           <div className={`flex items-center gap-2 ${compareMode ? "opacity-40 pointer-events-none" : ""}`}>
             <input
               type="date"
-              min={minStr}
-              max={todayStr}
+              min={pickerMin}
+              max={pickerMax}
+              disabled={pickerDisabled}
+              title={pickerDisabled ? "No data yet" : `Data available ${pickerMin} to ${pickerMax}`}
               value={customDate ?? ""}
               onChange={(e) => setCustomDate(e.target.value || null)}
-              className={dateInputClass}
+              className={`${dateInputClass} disabled:opacity-50 disabled:cursor-not-allowed`}
             />
             {customDate && (
               <>

@@ -1,3 +1,8 @@
+/** Local-timezone YYYY-MM-DD for a Date. */
+export function toYmd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 /** [start, end) for the calendar day containing dateStr (YYYY-MM-DD), local time. */
 export function dayBounds(dateStr: string): [Date, Date] {
   const from = new Date(`${dateStr}T00:00:00`);
