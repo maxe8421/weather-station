@@ -219,6 +219,13 @@ export default function Dashboard({ stationId }: { stationId: string }) {
               </>
             )}
           </div>
+          {!compareMode && (
+            <p className="text-xs text-slate-400">
+              {pickerDisabled
+                ? "No data available yet"
+                : `Data available ${new Date(`${pickerMin}T00:00:00`).toLocaleDateString([], { day: "numeric", month: "short" })} – ${new Date(`${pickerMax}T00:00:00`).toLocaleDateString([], { day: "numeric", month: "short" })}`}
+            </p>
+          )}
         </div>
       </div>
 
