@@ -47,5 +47,8 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  return NextResponse.json({ results });
+  const allFailed = results.every((r) => r.status !== "ok");
+  const statusCode = allFailed ? 500 : 200;
+
+  return NextResponse.json({ results }, { status: statusCode });
 }
