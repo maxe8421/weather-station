@@ -5,6 +5,7 @@ import { Station, WeatherReading, DailyReading, TimeRange, ReadingsResponse } fr
 import TimeRangeSelector from "./TimeRangeSelector";
 import CurrentConditions from "./CurrentConditions";
 import WeatherCharts from "./WeatherChart";
+import StationMap from "./StationMap";
 
 export default function Dashboard({ stationId }: { stationId: string }) {
   const [station, setStation] = useState<Station | null>(null);
@@ -81,6 +82,9 @@ export default function Dashboard({ stationId }: { stationId: string }) {
       ) : (
         <>
           <CurrentConditions reading={latest} />
+          {station && station.latitude !== null && station.longitude !== null && (
+            <StationMap latitude={station.latitude} longitude={station.longitude} name={station.name} />
+          )}
           <WeatherCharts mode={mode} readings={readings} daily={daily} range={range} />
         </>
       )}
