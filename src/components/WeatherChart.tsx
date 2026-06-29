@@ -2,7 +2,7 @@
 
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Legend,
+  ResponsiveContainer, Legend, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
 } from "recharts";
 import { WeatherReading, DailyReading, TimeRange } from "@/lib/types";
 import {
@@ -348,6 +348,37 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
     );
   }
 
+  // Wind rose: share of readings whose wind came from each of the 8 compass
+  // sectors over the window — the directional summary the line chart can't show.
+  function WindRoseCard() {
+    const dirs = (isDaily ? daily.map((r) => r.wind_dir) : readings.map((r) => r.wind_dir)).filter(
+      (v): v is number => v !== null
+    );
+    if (dirs.length === 0) return <NoData title="Wind Rose" />;
+    const sectors = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+    const counts = new Array(8).fill(0);
+    for (const d of dirs) counts[Math.round(d / 45) % 8]++;
+    const data = sectors.map((dir, i) => ({ dir, value: Math.round((counts[i] / dirs.length) * 1000) / 10 }));
+    return (
+      <Panel title="Wind Rose">
+        <ChartFrame>
+          <RadarChart data={data} outerRadius="72%">
+            <PolarGrid stroke={GRID_COLOR} />
+            <PolarAngleAxis dataKey="dir" tick={{ fill: "#6b7280", fontSize: 12 }} />
+            <PolarRadiusAxis angle={67.5} tick={{ fill: "#94a3b8", fontSize: 10 }} unit="%" />
+            <Radar dataKey="value" stroke={COLORS.green} fill={COLORS.green} fillOpacity={0.4} />
+            <Tooltip
+              contentStyle={TOOLTIP_STYLE}
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              formatter={(value: any) => [`${value}%`, "From"]}
+            />
+          </RadarChart>
+        </ChartFrame>
+        <div className="text-xs text-gray-400 mt-1 text-center">% of readings the wind came from each direction</div>
+      </Panel>
+    );
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <TemperatureCard />
@@ -359,6 +390,7 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
       ]} />
       <RainfallCard />
       <WindDirectionCard />
+      <WindRoseCard />
       <UVCard />
       <SunshineCard />
     </div>
