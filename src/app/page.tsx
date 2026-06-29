@@ -18,6 +18,51 @@ interface StationWithLatest extends Station {
   summary: string | null;
 }
 
+const r1 = (n: number) => Math.round(n * 10) / 10;
+
+interface RegionStats {
+  count: number;
+  avgTemp: number | null;
+  warmest: StationWithLatest | null;
+  windiest: StationWithLatest | null;
+  maxRain: number | null;
+}
+
+/** Aggregate the current conditions of all stations in one region (country group). */
+function regionStats(list: StationWithLatest[]): RegionStats {
+  const withData = list.filter((s) => s.latest);
+  const temps = withData.map((s) => s.latest!.temp_c).filter((v): v is number => v !== null);
+  const avgTemp = temps.length ? r1(temps.reduce((a, b) => a + b, 0) / temps.length) : null;
+  const byTemp = withData.filter((s) => s.latest!.temp_c !== null);
+  const warmest = byTemp.length ? byTemp.reduce((m, s) => (s.latest!.temp_c! > m.latest!.temp_c! ? s : m)) : null;
+  const byWind = withData.filter((s) => s.avg_wind_kph !== null);
+  const windiest = byWind.length ? byWind.reduce((m, s) => (s.avg_wind_kph! > m.avg_wind_kph! ? s : m)) : null;
+  const rains = withData.map((s) => s.latest!.precip_total_mm).filter((v): v is number => v !== null);
+  const maxRain = rains.length ? r1(Math.max(...rains)) : null;
+  return { count: withData.length, avgTemp, warmest, windiest, maxRain };
+}
+
+/** One-line summary headline for a region. */
+function regionHeadline(s: RegionStats): string {
+  const parts: string[] = [`${s.count} station${s.count === 1 ? "" : "s"}`];
+  if (s.avgTemp !== null) parts.push(`avg ${s.avgTemp}°`);
+  if (s.warmest && s.count > 1) parts.push(`warmest ${s.warmest.name} ${s.warmest.latest!.temp_c}°`);
+  if (s.windiest && (s.windiest.avg_wind_kph ?? 0) > 0) parts.push(`windiest ${s.windiest.name} ${s.windiest.avg_wind_kph} km/h`);
+  if (s.maxRain && s.maxRain > 0) parts.push(`up to ${s.maxRain} mm rain`);
+  return parts.join(" · ");
+}
+
+/** Cross-region comparison line (warmest vs coolest region), or null if <2 regions report. */
+function crossRegionHeadline(regions: { country: string; stats: RegionStats }[]): string | null {
+  const withTemp = regions.filter((r) => r.stats.avgTemp !== null);
+  if (withTemp.length < 2) return null;
+  const warm = withTemp.reduce((m, r) => (r.stats.avgTemp! > m.stats.avgTemp! ? r : m));
+  const cool = withTemp.reduce((m, r) => (r.stats.avgTemp! < m.stats.avgTemp! ? r : m));
+  const diff = r1(warm.stats.avgTemp! - cool.stats.avgTemp!);
+  if (diff < 0.1) return `All ${withTemp.length} regions are averaging about ${warm.stats.avgTemp}° right now.`;
+  return `${warm.country} is the warmest region right now (avg ${warm.stats.avgTemp}°), ${cool.country} the coolest (${cool.stats.avgTemp}°) — ${diff}° apart.`;
+}
+
 function Stat({ label, value, unit }: { label: string; value: number | null; unit?: string }) {
   return (
     <div>
@@ -176,18 +221,33 @@ export default function Home() {
         </div>
       ) : (
         <div className="space-y-8">
-          {countries.map((country) => (
-            <section key={country}>
-              <h2 className="text-sm font-medium text-slate-500 uppercase tracking-wide mb-3">
-                {country}
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {groups.get(country)!.map((s) => (
-                  <StationCard key={s.id} s={s} now={now} />
+          {(() => {
+            const regionData = countries.map((country) => ({ country, stats: regionStats(groups.get(country)!) }));
+            const cross = crossRegionHeadline(regionData);
+            return (
+              <>
+                {cross && (
+                  <div className="bg-sky-50 border border-sky-100 rounded-xl p-4">
+                    <h2 className="text-sm font-medium text-sky-800 mb-1">Across regions</h2>
+                    <p className="text-sm text-slate-700 leading-relaxed">{cross}</p>
+                  </div>
+                )}
+                {countries.map((country) => (
+                  <section key={country}>
+                    <h2 className="text-sm font-medium text-slate-500 uppercase tracking-wide mb-1">
+                      {country}
+                    </h2>
+                    <p className="text-xs text-slate-500 mb-3">{regionHeadline(regionStats(groups.get(country)!))}</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                      {groups.get(country)!.map((s) => (
+                        <StationCard key={s.id} s={s} now={now} />
+                      ))}
+                    </div>
+                  </section>
                 ))}
-              </div>
-            </section>
-          ))}
+              </>
+            );
+          })()}
         </div>
       )}
     </main>
