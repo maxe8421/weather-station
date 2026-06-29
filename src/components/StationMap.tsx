@@ -32,6 +32,7 @@ export default function StationMap({ latitude, longitude, name }: Props) {
         title={`Map showing the location of ${name}`}
         src={src}
         loading="lazy"
+        referrerPolicy="no-referrer"
         className="w-full h-[120px] rounded-lg border border-gray-100"
       />
       <div className="text-xs text-gray-400 mt-2">
