@@ -24,6 +24,10 @@ const TOOLTIP_STYLE = { borderRadius: "8px", border: "1px solid #e5e7eb" };
 const GRID_COLOR = "#d1d5db";
 const TICK_STYLE = { fill: "#6b7280" };
 
+// Show the unambiguous day + time in tooltips (the x-axis itself uses short labels).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const tipLabel = (label: any, payload: any) => payload?.[0]?.payload?.fullLabel ?? label;
+
 type Mode = "raw" | "daily";
 type Row = Record<string, number | string | null>;
 interface FieldDef { key: keyof WeatherReading | keyof DailyReading; label: string; color: string }
@@ -70,6 +74,31 @@ function ChartFrame({ children }: { children: React.ReactElement }) {
   );
 }
 
+// Two-tier x-axis for the 7-day view: small 6-hour time labels (00:00 / 06:00 /
+// 12:00 / 18:00) with the day shown prominently beneath each midnight bucket.
+function buildTimeAxis(range: TimeRange, rows: Row[]) {
+  if (range !== "7d") {
+    return <XAxis dataKey="label" fontSize={12} tick={TICK_STYLE} />;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const Tick = ({ x, y, payload }: any) => {
+    const day = rows[payload.index]?.dayLabel as string | null | undefined;
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text dy={12} textAnchor="middle" fontSize={10} fill="#94a3b8">
+          {payload.value}
+        </text>
+        {day && (
+          <text dy={28} textAnchor="middle" fontSize={12} fontWeight={500} fill="#334155">
+            {day}
+          </text>
+        )}
+      </g>
+    );
+  };
+  return <XAxis dataKey="label" interval={0} height={48} tickLine={false} tick={Tick} />;
+}
+
 export default function WeatherCharts({ mode, readings, daily, range }: ChartsProps) {
   const isDaily = mode === "daily";
   const hasAny = isDaily ? daily.length > 0 : readings.length > 0;
@@ -92,21 +121,28 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
 
     if (isDaily) {
       return daily.map((r) => {
-        const o: Row = { label: formatDay(r.day, range) };
+        const label = formatDay(r.day, range);
+        const o: Row = { label, fullLabel: label };
         for (const f of fields) o[f.label] = read(r, f.key);
         return o;
       });
     }
     if (range === "24h") {
       return readings.map((r) => {
-        const o: Row = { label: formatTime(r.observed_at, range) };
+        const label = formatTime(r.observed_at, range);
+        const full = new Date(r.observed_at).toLocaleString([], {
+          weekday: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        const o: Row = { label, fullLabel: full };
         for (const f of fields) o[f.label] = read(r, f.key);
         return o;
       });
     }
     const agg = aggregateReadings(readings, fields.map((f) => f.key as keyof WeatherReading), range);
     return agg.map((p) => {
-      const o: Row = { label: p.label };
+      const o: Row = { label: p.label, dayLabel: p.dayLabel ?? null, fullLabel: p.fullLabel ?? p.label };
       for (const f of fields) o[f.label] = read(p, f.key);
       return o;
     });
@@ -121,12 +157,12 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
         <ChartFrame>
           <LineChart data={rows}>
             <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
-            <XAxis dataKey="label" fontSize={12} tick={TICK_STYLE} />
+            {buildTimeAxis(range, rows)}
             <YAxis fontSize={12} tick={TICK_STYLE} unit={unit ? ` ${unit}` : undefined} />
-            <Tooltip contentStyle={TOOLTIP_STYLE} />
+            <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={tipLabel} />
             <Legend />
             {fields.map((f) => (
-              <Line key={f.label} type="monotone" dataKey={f.label} stroke={f.color} dot={false} strokeWidth={2} connectNulls />
+              <Line key={f.label} type="monotone" dataKey={f.label} stroke={f.color} dot={range === "7d" ? { r: 2 } : false} strokeWidth={2} connectNulls />
             ))}
           </LineChart>
         </ChartFrame>
@@ -148,7 +184,7 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
               <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
               <XAxis dataKey="label" fontSize={12} tick={TICK_STYLE} />
               <YAxis fontSize={12} tick={TICK_STYLE} unit=" °C" />
-              <Tooltip contentStyle={TOOLTIP_STYLE} />
+              <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={tipLabel} />
               <Legend />
               <Line type="monotone" dataKey="max" name="Max" stroke={COLORS.red} dot={false} strokeWidth={1.5} connectNulls />
               <Line type="monotone" dataKey="avg" name="Avg" stroke={COLORS.orange} dot={false} strokeWidth={2} connectNulls />
@@ -213,7 +249,7 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
         <ChartFrame>
           <LineChart data={rows}>
             <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
-            <XAxis dataKey="label" fontSize={12} tick={TICK_STYLE} />
+            {buildTimeAxis(range, rows)}
             <YAxis fontSize={12} tick={TICK_STYLE} domain={[0, 360]} ticks={[0, 90, 180, 270, 360]}
               tickFormatter={(v: number) => ["N", "E", "S", "W", "N"][v / 90]} />
             <Tooltip
@@ -221,7 +257,7 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
               formatter={(value: any) => [`${value}° ${windDirToCompass(Number(value))}`, "Direction"]}
               contentStyle={TOOLTIP_STYLE}
             />
-            <Line type="stepAfter" dataKey="Direction" stroke={COLORS.green} dot={false} strokeWidth={2} connectNulls />
+            <Line type="stepAfter" dataKey="Direction" stroke={COLORS.green} dot={range === "7d" ? { r: 2 } : false} strokeWidth={2} connectNulls />
           </LineChart>
         </ChartFrame>
       </Panel>
@@ -241,9 +277,9 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
         <ChartFrame>
           <BarChart data={rows}>
             <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
-            <XAxis dataKey="label" fontSize={12} tick={TICK_STYLE} />
+            {buildTimeAxis(range, rows)}
             <YAxis fontSize={12} tick={TICK_STYLE} unit=" mm" />
-            <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: "rgba(0,0,0,0.04)" }} />
+            <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: "rgba(0,0,0,0.04)" }} labelFormatter={tipLabel} />
             <Legend />
             {fields.map((f) => (
               <Bar key={f.label} dataKey={f.label} fill={f.color} radius={[2, 2, 0, 0]} />
@@ -265,15 +301,15 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
         <ChartFrame>
           <LineChart data={rows}>
             <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
-            <XAxis dataKey="label" fontSize={12} tick={TICK_STYLE} />
+            {buildTimeAxis(range, rows)}
             <YAxis yAxisId="uv" fontSize={12} tick={{ fill: COLORS.amber }}
               label={{ value: "UV Index", angle: -90, position: "insideLeft", style: { fill: COLORS.amber, fontSize: 11 } }} />
             <YAxis yAxisId="solar" orientation="right" fontSize={12} tick={{ fill: COLORS.pink }}
               label={{ value: "W/m²", angle: 90, position: "insideRight", style: { fill: COLORS.pink, fontSize: 11 } }} />
-            <Tooltip contentStyle={TOOLTIP_STYLE} />
+            <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={tipLabel} />
             <Legend />
-            <Line yAxisId="uv" type="monotone" dataKey="UV Index" stroke={COLORS.amber} dot={false} strokeWidth={2} connectNulls />
-            <Line yAxisId="solar" type="monotone" dataKey="Solar Radiation" stroke={COLORS.pink} dot={false} strokeWidth={2} connectNulls />
+            <Line yAxisId="uv" type="monotone" dataKey="UV Index" stroke={COLORS.amber} dot={range === "7d" ? { r: 2 } : false} strokeWidth={2} connectNulls />
+            <Line yAxisId="solar" type="monotone" dataKey="Solar Radiation" stroke={COLORS.pink} dot={range === "7d" ? { r: 2 } : false} strokeWidth={2} connectNulls />
           </LineChart>
         </ChartFrame>
       </Panel>

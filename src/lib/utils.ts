@@ -29,19 +29,11 @@ export function formatTime(iso: string, range: string): string {
 
 interface AggregatedPoint {
   label: string;
-  [key: string]: number | string | null;
-}
-
-function groupKey(iso: string, range: TimeRange): string {
-  const d = new Date(iso);
-  if (range === "7d") {
-    return d.toLocaleDateString([], { weekday: "short" }) + " " +
-      d.toLocaleTimeString([], { hour: "2-digit" });
-  }
-  // Client-side daily bucketing is only used for the 30-day range, where two
-  // calendar days can never share a "month day" label, so a concise label is
-  // safe. Multi-year ranges (1y / all) are aggregated in SQL with full dates.
-  return d.toLocaleDateString([], { month: "short", day: "numeric" });
+  /** Day label, set only on the first bucket of each day (for the two-tier 7d axis). */
+  dayLabel?: string | null;
+  /** Full day + time, used for tooltips so every point is unambiguous. */
+  fullLabel?: string;
+  [key: string]: number | string | null | undefined;
 }
 
 /** Format an ISO date (from the daily SQL aggregate) for an axis label. */
@@ -57,6 +49,8 @@ export function formatDay(isoDate: string, range: TimeRange): string {
 function avgValues(values: number[]): number {
   return Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10;
 }
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
 
 export function aggregateReadings(
   readings: WeatherReading[],
@@ -75,28 +69,66 @@ export function aggregateReadings(
     });
   }
 
-  const groups = new Map<string, WeatherReading[]>();
+  // Bucket key → metadata + member readings, kept in chronological order.
+  interface Bucket {
+    sort: number;
+    label: string;
+    dayLabel: string | null;
+    fullLabel: string;
+    rows: WeatherReading[];
+  }
+  const groups = new Map<string, Bucket>();
 
   for (const r of readings) {
-    const key = groupKey(r.observed_at, range);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(r);
+    const d = new Date(r.observed_at);
+    let key: string;
+    let label: string;
+    let dayLabel: string | null = null;
+    let fullLabel: string;
+    let sort: number;
+
+    if (range === "7d") {
+      // 6-hour windows aligned to 00:00 / 06:00 / 12:00 / 18:00 local time.
+      const bucketHour = Math.floor(d.getHours() / 6) * 6;
+      const bucket = new Date(d);
+      bucket.setHours(bucketHour, 0, 0, 0);
+      key = bucket.toISOString();
+      sort = bucket.getTime();
+      label = `${pad2(bucketHour)}:00`;
+      const dayShort = bucket.toLocaleDateString([], { weekday: "short", day: "numeric" });
+      fullLabel = `${dayShort}, ${label}`;
+      // Mark the midnight bucket with the day so the axis reads clearly.
+      if (bucketHour === 0) dayLabel = dayShort;
+    } else {
+      // Daily buckets (30d). Within 30 days a "month day" label is unique.
+      const day = new Date(d);
+      day.setHours(0, 0, 0, 0);
+      key = day.toISOString();
+      sort = day.getTime();
+      label = day.toLocaleDateString([], { month: "short", day: "numeric" });
+      fullLabel = label;
+    }
+
+    if (!groups.has(key)) groups.set(key, { sort, label, dayLabel, fullLabel, rows: [] });
+    groups.get(key)!.rows.push(r);
   }
 
-  return Array.from(groups.entries()).map(([label, group]) => {
-    const point: AggregatedPoint = { label };
-    for (const f of fields) {
-      const values = group
-        .map((r) => r[f])
-        .filter((v): v is number => v !== null && typeof v === "number");
-      if (f === "wind_dir") {
-        point[f] = values.length > 0 ? averageWindDir(values) : null;
-      } else {
-        point[f] = values.length > 0 ? avgValues(values) : null;
+  return Array.from(groups.values())
+    .sort((a, b) => a.sort - b.sort)
+    .map((g) => {
+      const point: AggregatedPoint = { label: g.label, dayLabel: g.dayLabel, fullLabel: g.fullLabel };
+      for (const f of fields) {
+        const values = g.rows
+          .map((r) => r[f])
+          .filter((v): v is number => v !== null && typeof v === "number");
+        if (f === "wind_dir") {
+          point[f] = values.length > 0 ? averageWindDir(values) : null;
+        } else {
+          point[f] = values.length > 0 ? avgValues(values) : null;
+        }
       }
-    }
-    return point;
-  });
+      return point;
+    });
 }
 
 interface DailySummary {
