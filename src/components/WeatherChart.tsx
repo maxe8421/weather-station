@@ -117,7 +117,7 @@ function SingleChart({ config, readings, range }: { config: ChartConfig; reading
           <Tooltip contentStyle={TOOLTIP_STYLE} />
           <Legend />
           {config.fields.map((f) => (
-            <Line key={f.key} type="monotone" dataKey={f.label} stroke={f.color} dot={false} strokeWidth={2} />
+            <Line key={f.key} type="monotone" dataKey={f.label} stroke={f.color} dot={false} strokeWidth={2} connectNulls />
           ))}
         </LineChart>
       </ResponsiveContainer>
