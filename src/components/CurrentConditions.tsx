@@ -25,7 +25,7 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
   return (
     <div>
       <h2 className="text-sm font-medium text-slate-500 mb-2">{title}</h2>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">{children}</div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">{children}</div>
     </div>
   );
 }

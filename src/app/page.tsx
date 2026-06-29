@@ -67,11 +67,11 @@ export default function Home() {
   }, []);
 
   return (
-    <main className="max-w-5xl mx-auto px-4 py-8 w-full">
+    <main className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
       <h1 className="text-2xl font-semibold text-slate-900 mb-6">Stations</h1>
 
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           <CardSkeleton />
           <CardSkeleton />
           <CardSkeleton />
@@ -84,7 +84,7 @@ export default function Home() {
           </a>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {stations.map((s) => {
             const stale =
               s.latest &&

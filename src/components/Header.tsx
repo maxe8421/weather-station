@@ -1,7 +1,7 @@
 export default function Header() {
   return (
     <header className="border-b border-slate-200 bg-white/80 backdrop-blur sticky top-0 z-20">
-      <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
         <a href="/" className="flex items-center gap-2 font-semibold text-slate-900">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" className="text-sky-500" aria-hidden="true">
             <path

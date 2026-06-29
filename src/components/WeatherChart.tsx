@@ -270,7 +270,7 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4">
       <TemperatureCard />
       <LineCard title="Humidity" unit="%" fields={[{ key: "humidity", label: "Humidity", color: COLORS.cyan }]} />
       <LineCard title="Pressure" unit="hPa" fields={[{ key: "pressure_mb", label: "Pressure", color: COLORS.purple }]} />
