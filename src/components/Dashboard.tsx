@@ -40,7 +40,7 @@ export default function Dashboard({ stationId }: { stationId: string }) {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <a href="/" className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">←</a>
+          <a href="/" className="text-gray-400 hover:text-gray-600">←</a>
           <h1 className="text-2xl font-bold">{station?.name ?? "Loading..."}</h1>
           {station && (
             <span className="text-sm text-gray-400">{station.wunderground_id}</span>

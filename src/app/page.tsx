@@ -31,13 +31,13 @@ export default function Home() {
   }, []);
 
   return (
-    <main className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+    <main className="min-h-screen bg-gray-50 text-gray-900">
       <div className="max-w-5xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-2xl font-bold">Weather Stations</h1>
           <a
             href="/stations"
-            className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400"
+            className="text-sm text-blue-600 hover:text-blue-800"
           >
             Manage Stations
           </a>
@@ -53,7 +53,7 @@ export default function Home() {
               <a
                 key={s.id}
                 href={`/station/${s.id}`}
-                className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600 transition-colors"
+                className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:border-blue-300 transition-colors"
               >
                 <div className="flex items-center justify-between mb-4">
                   <div>
@@ -61,7 +61,7 @@ export default function Home() {
                     <div className="text-xs text-gray-400">{s.wunderground_id}</div>
                   </div>
                   {s.is_primary && (
-                    <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full">
+                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
                       Primary
                     </span>
                   )}

@@ -5,8 +5,8 @@ import { windDirToCompass } from "@/lib/utils";
 
 function Card({ label, value, unit }: { label: string; value: string | number | null; unit?: string }) {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-700">
-      <div className="text-sm text-gray-500 dark:text-gray-400">{label}</div>
+    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+      <div className="text-sm text-gray-500">{label}</div>
       <div className="text-2xl font-semibold mt-1">
         {value !== null && value !== undefined ? (
           <>
@@ -30,7 +30,7 @@ export default function CurrentConditions({ reading }: { reading: WeatherReading
 
   return (
     <div>
-      <div className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+      <div className="text-sm text-gray-500 mb-4">
         Last updated: {time}
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">

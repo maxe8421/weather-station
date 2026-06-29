@@ -13,7 +13,7 @@ export default function StationPicker({ stations, selected, onSelect }: Props) {
     <select
       value={selected || ""}
       onChange={(e) => onSelect(e.target.value)}
-      className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm"
+      className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm"
     >
       {stations.map((s) => (
         <option key={s.id} value={s.id}>
