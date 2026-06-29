@@ -2,10 +2,13 @@
 
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Legend, ScatterChart, Scatter, ZAxis,
+  ResponsiveContainer, Legend,
 } from "recharts";
 import { WeatherReading, DailyReading, TimeRange } from "@/lib/types";
-import { formatTime, formatDay, aggregateDaily, aggregateReadings, windDirToCompass } from "@/lib/utils";
+import {
+  formatTime, formatDay, aggregateDaily, aggregateReadings, windDirToCompass,
+  hourlyWindDirection, sunshineByDay,
+} from "@/lib/utils";
 
 const COLORS = {
   red: "#dc2626",
@@ -207,42 +210,19 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
   }
 
   function WindDirectionCard() {
-    const title = range === "24h" ? "Wind Direction" : "Wind Direction (Average)";
+    const title =
+      range === "24h" ? "Wind Direction (Hourly Average)" : "Wind Direction (Average)";
 
-    if (range === "24h" && !isDaily) {
-      const points = readings
-        .filter((r) => r.wind_dir !== null)
-        .map((r) => ({
-          label: formatTime(r.observed_at, range),
-          direction: r.wind_dir,
-          speed: r.wind_speed_kph ?? 0,
-        }));
-      if (points.length === 0) return <NoData title={title} />;
-      return (
-        <Panel title={title}>
-          <ChartFrame>
-            <ScatterChart>
-              <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
-              <XAxis dataKey="label" fontSize={12} tick={TICK_STYLE} />
-              <YAxis dataKey="direction" fontSize={12} tick={TICK_STYLE} domain={[0, 360]}
-                ticks={[0, 90, 180, 270, 360]} tickFormatter={(v: number) => ["N", "E", "S", "W", "N"][v / 90]} />
-              <ZAxis dataKey="speed" range={[20, 200]} name="Speed (km/h)" />
-              <Tooltip
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                formatter={(value: any, name: any) =>
-                  name === "direction" ? [`${value}° ${windDirToCompass(Number(value))}`, "Direction"] : [value, name]
-                }
-                contentStyle={TOOLTIP_STYLE}
-              />
-              <Scatter data={points} fill={COLORS.green} opacity={0.7} />
-            </ScatterChart>
-          </ChartFrame>
-          <div className="text-xs text-gray-400 mt-1 text-center">Dot size = wind speed</div>
-        </Panel>
-      );
-    }
-
-    const rows = buildRows([{ key: "wind_dir", label: "Direction", color: COLORS.green }]);
+    // 24h now shows hourly vector-mean averages — the same circular averaging
+    // used for longer ranges — instead of a hard-to-read scatter of raw points.
+    const rows =
+      range === "24h" && !isDaily
+        ? hourlyWindDirection(readings).map((p) => ({
+            label: p.label,
+            fullLabel: p.fullLabel,
+            Direction: p.direction,
+          }))
+        : buildRows([{ key: "wind_dir", label: "Direction", color: COLORS.green }]);
     if (!rowsHaveData(rows, ["Direction"])) return <NoData title={title} />;
     return (
       <Panel title={title}>
@@ -316,6 +296,29 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
     );
   }
 
+  // Daily bright-sunshine hours (WMO ≥120 W/m²). Each bar is one day: a single
+  // bar for 24h, one per day across 7d / 30d / longer. Mirrors Weathercloud's
+  // "hours" figure shown under Solar Radiation.
+  function SunshineCard() {
+    const rows = isDaily
+      ? daily.map((r) => ({ label: formatDay(r.day, range), fullLabel: formatDay(r.day, range), Hours: r.sunshine_hours }))
+      : sunshineByDay(readings, range).map((p) => ({ label: p.label, fullLabel: p.label, Hours: p.hours }));
+    if (!rowsHaveData(rows, ["Hours"])) return <NoData title="Sunshine" />;
+    return (
+      <Panel title="Sunshine">
+        <ChartFrame>
+          <BarChart data={rows}>
+            <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
+            <XAxis dataKey="label" fontSize={12} tick={TICK_STYLE} />
+            <YAxis fontSize={12} tick={TICK_STYLE} unit=" h" allowDecimals />
+            <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: "rgba(0,0,0,0.04)" }} labelFormatter={tipLabel} />
+            <Bar dataKey="Hours" name="Sunshine (hrs)" fill={COLORS.amber} radius={[2, 2, 0, 0]} />
+          </BarChart>
+        </ChartFrame>
+      </Panel>
+    );
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <TemperatureCard />
@@ -328,6 +331,7 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
       <RainfallCard />
       <WindDirectionCard />
       <UVCard />
+      <SunshineCard />
     </div>
   );
 }

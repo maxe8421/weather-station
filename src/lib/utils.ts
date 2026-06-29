@@ -52,6 +52,84 @@ function avgValues(values: number[]): number {
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
+// WMO "bright sunshine" threshold: direct irradiance at or above 120 W/m².
+// Weathercloud derives its "hours" figure the same way.
+const SUNSHINE_THRESHOLD_WM2 = 120;
+
+/**
+ * Hourly vector-mean wind direction for the 24h view. Buckets raw points into
+ * clock hours and averages each bucket circularly, so the chart reads as one
+ * clean point per hour instead of ~144 scattered raw observations.
+ */
+export function hourlyWindDirection(
+  readings: WeatherReading[]
+): { label: string; fullLabel: string; direction: number | null }[] {
+  interface Bucket { sort: number; label: string; fullLabel: string; dirs: number[] }
+  const groups = new Map<number, Bucket>();
+
+  for (const r of readings) {
+    if (r.wind_dir === null) continue;
+    const bucket = new Date(r.observed_at);
+    bucket.setMinutes(0, 0, 0);
+    const key = bucket.getTime();
+    if (!groups.has(key)) {
+      groups.set(key, {
+        sort: key,
+        label: bucket.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        fullLabel: bucket.toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" }),
+        dirs: [],
+      });
+    }
+    groups.get(key)!.dirs.push(r.wind_dir);
+  }
+
+  return Array.from(groups.values())
+    .sort((a, b) => a.sort - b.sort)
+    .map((g) => ({ label: g.label, fullLabel: g.fullLabel, direction: averageWindDir(g.dirs) }));
+}
+
+/**
+ * Estimate hours of bright sunshine from a series of raw solar-radiation
+ * readings. Sums the elapsed time during which irradiance held at or above the
+ * WMO threshold; gaps are capped so a missing run of readings can't inflate the
+ * total. Returns null when the station reports no solar data.
+ */
+export function sunshineHours(readings: WeatherReading[]): number | null {
+  const pts = readings
+    .filter((r) => r.solar_radiation !== null)
+    .map((r) => ({ t: new Date(r.observed_at).getTime(), s: r.solar_radiation as number }))
+    .sort((a, b) => a.t - b.t);
+  if (pts.length < 2) return null;
+
+  const MAX_GAP_MS = 30 * 60 * 1000;
+  let ms = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    if (pts[i].s >= SUNSHINE_THRESHOLD_WM2) {
+      ms += Math.min(pts[i + 1].t - pts[i].t, MAX_GAP_MS);
+    }
+  }
+  return Math.round((ms / 3_600_000) * 10) / 10;
+}
+
+/** Per-day bright-sunshine hours over a window of raw readings (24h / 7d / custom). */
+export function sunshineByDay(
+  readings: WeatherReading[],
+  range: TimeRange
+): { label: string; hours: number | null }[] {
+  const byDay = new Map<string, { sort: number; date: string; rows: WeatherReading[] }>();
+  for (const r of readings) {
+    const d = new Date(r.observed_at);
+    const day = new Date(d);
+    day.setHours(0, 0, 0, 0);
+    const key = day.toISOString();
+    if (!byDay.has(key)) byDay.set(key, { sort: day.getTime(), date: day.toISOString().slice(0, 10), rows: [] });
+    byDay.get(key)!.rows.push(r);
+  }
+  return Array.from(byDay.values())
+    .sort((a, b) => a.sort - b.sort)
+    .map((g) => ({ label: formatDay(g.date, range), hours: sunshineHours(g.rows) }));
+}
+
 export function aggregateReadings(
   readings: WeatherReading[],
   fields: (keyof WeatherReading)[],
