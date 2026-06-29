@@ -1,14 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { fetchWeathercloudCoordinates } from "@/lib/weathercloud";
+import { geoFromCoords } from "@/lib/geo";
 import { isAuthorised } from "@/lib/auth";
 import { mapLimit } from "@/lib/http";
 
+interface Row {
+  id: string;
+  source: string;
+  source_id: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  timezone: string | null;
+}
+
 /**
- * Idempotent, admin-only backfill of coordinates for Weathercloud stations
- * that were added before coordinate capture existed. Kept off the collection
- * hot path so the cron run stays fast and never re-fetches profile pages on a
- * loop. Safe to call repeatedly: it only touches stations missing coordinates.
+ * Idempotent, admin-only backfill of geo metadata (coordinates + timezone +
+ * country) for stations missing it. Weathercloud stations have coordinates
+ * scraped from their profile page; timezone/country are derived offline from
+ * coordinates. Safe to call repeatedly. Kept off the collection hot path.
  */
 export async function POST(request: NextRequest) {
   if (!isAuthorised(request)) {
@@ -16,32 +26,45 @@ export async function POST(request: NextRequest) {
   }
 
   const supabase = getSupabaseAdmin();
-  const { data: stations, error } = await supabase
+  const { data, error } = await supabase
     .from("stations")
-    .select("id, source_id")
-    .eq("source", "weathercloud")
-    .is("latitude", null);
+    .select("id, source, source_id, latitude, longitude, timezone")
+    .or("latitude.is.null,timezone.is.null");
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const targets = (stations ?? []).filter((s) => s.source_id);
+  const targets = (data ?? []) as Row[];
   let updated = 0;
   const misses: string[] = [];
 
   await mapLimit(targets, 2, async (station) => {
-    const coords = await fetchWeathercloudCoordinates(station.source_id as string);
-    if (coords) {
-      const { error: updateError } = await supabase
-        .from("stations")
-        .update({ latitude: coords.latitude, longitude: coords.longitude })
-        .eq("id", station.id);
-      if (updateError) misses.push(station.source_id as string);
-      else updated += 1;
-    } else {
-      misses.push(station.source_id as string);
+    let lat = station.latitude;
+    let lon = station.longitude;
+
+    // Weathercloud stations may still be missing coordinates — scrape them.
+    if ((lat === null || lon === null) && station.source === "weathercloud" && station.source_id) {
+      const coords = await fetchWeathercloudCoordinates(station.source_id);
+      if (coords) {
+        lat = coords.latitude;
+        lon = coords.longitude;
+      }
     }
+
+    if (lat === null || lon === null) {
+      misses.push(station.source_id ?? station.id);
+      return;
+    }
+
+    const geo = geoFromCoords(lat, lon);
+    const { error: updateError } = await supabase
+      .from("stations")
+      .update({ latitude: lat, longitude: lon, timezone: geo.timezone, country: geo.country })
+      .eq("id", station.id);
+
+    if (updateError) misses.push(station.source_id ?? station.id);
+    else updated += 1;
   });
 
   return NextResponse.json({ checked: targets.length, updated, misses });

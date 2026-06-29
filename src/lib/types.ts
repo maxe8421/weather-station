@@ -7,6 +7,8 @@ export interface Station {
   is_primary: boolean;
   source: "wunderground" | "weathercloud";
   source_id: string | null;
+  timezone: string | null;
+  country: string | null;
   created_at: string;
 }
 

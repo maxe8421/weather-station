@@ -8,7 +8,7 @@ import WeatherCharts from "./WeatherChart";
 import StationMap from "./StationMap";
 import { CardSkeleton, ChartSkeleton } from "./ui";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
-import { relativeTime } from "@/lib/time";
+import { relativeTime, localTime } from "@/lib/time";
 
 export default function Dashboard({ stationId }: { stationId: string }) {
   const [station, setStation] = useState<Station | null>(null);
@@ -20,7 +20,13 @@ export default function Dashboard({ stationId }: { stationId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
+  const [now, setNow] = useState(() => new Date());
   const lastObservedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const clock = setInterval(() => setNow(new Date()), 30 * 1000);
+    return () => clearInterval(clock);
+  }, []);
 
   useEffect(() => {
     fetch("/api/stations")
@@ -103,11 +109,15 @@ export default function Dashboard({ stationId }: { stationId: string }) {
           <h1 className="text-2xl font-semibold text-slate-900 truncate">
             {station?.name ?? "…"}
           </h1>
-          <div className="flex items-center gap-2 mt-1 text-sm text-slate-500">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-sm text-slate-500">
             {station && (
               <span>
                 {station.source === "weathercloud" ? `Weathercloud · ${station.source_id}` : station.wunderground_id}
               </span>
+            )}
+            {station?.country && <span>· {station.country}</span>}
+            {station && localTime(station.timezone, now) && (
+              <span>· {localTime(station.timezone, now)} local</span>
             )}
             {latest && (
               <span

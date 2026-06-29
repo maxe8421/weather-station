@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Station } from "@/lib/types";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
 import { CardSkeleton } from "@/components/ui";
-import { relativeTime } from "@/lib/time";
+import { relativeTime, localTime } from "@/lib/time";
 
 interface StationWithLatest extends Station {
   latest: {
@@ -35,9 +35,75 @@ function Stat({ label, value, unit }: { label: string; value: number | null; uni
   );
 }
 
+function StationCard({ s, now }: { s: StationWithLatest; now: Date }) {
+  const stale =
+    s.latest &&
+    (now.getTime() - new Date(s.latest.observed_at).getTime()) / 60000 >
+      (s.source === "weathercloud" ? 120 : 30);
+  const time = localTime(s.timezone, now);
+
+  return (
+    <a
+      href={`/station/${s.id}`}
+      className="group bg-white rounded-xl p-5 border border-slate-200 hover:border-sky-300 hover:shadow-sm transition-all"
+    >
+      <div className="flex items-start justify-between mb-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-slate-900 truncate">{s.name}</span>
+            {s.is_primary && (
+              <span className="text-xs bg-sky-50 text-sky-700 px-2 py-0.5 rounded-full shrink-0">
+                Primary
+              </span>
+            )}
+          </div>
+          <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-2">
+            <span>{s.source === "weathercloud" ? s.source_id : s.wunderground_id}</span>
+            {time && <span className="text-slate-500">· {time} local</span>}
+          </div>
+        </div>
+        <span className="text-slate-300 group-hover:text-sky-400 transition-colors text-lg leading-none">
+          ›
+        </span>
+      </div>
+
+      {s.latest ? (
+        <>
+          <div className="flex items-end justify-between">
+            <div className="text-4xl font-semibold tracking-tight text-slate-900 leading-none">
+              {s.latest.temp_c !== null ? `${s.latest.temp_c}°` : "—"}
+            </div>
+            {s.latest.temp_indoor_c !== null && (
+              <div className="text-xs text-slate-500 pb-1">
+                Indoor <span className="font-medium text-slate-700">{s.latest.temp_indoor_c}°</span>
+              </div>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-3 mt-4">
+            <Stat label="Wind (1 hr avg)" value={s.avg_wind_kph} unit="km/h" />
+            <Stat label="Rain today" value={s.latest.precip_total_mm} unit="mm" />
+          </div>
+          <div
+            className={`text-xs mt-4 flex items-center gap-1.5 ${
+              stale ? "text-amber-600" : "text-slate-400"
+            }`}
+          >
+            {stale && <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500" />}
+            {stale ? "Stale · " : ""}
+            {relativeTime(s.latest.observed_at)}
+          </div>
+        </>
+      ) : (
+        <div className="text-sm text-slate-400 py-4">No data yet</div>
+      )}
+    </a>
+  );
+}
+
 export default function Home() {
   const [stations, setStations] = useState<StationWithLatest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
     const load = () =>
@@ -60,11 +126,30 @@ export default function Home() {
       .subscribe();
 
     const fallback = setInterval(load, 5 * 60 * 1000);
+    const clock = setInterval(() => setNow(new Date()), 30 * 1000);
     return () => {
       supabaseBrowser.removeChannel(channel);
       clearInterval(fallback);
+      clearInterval(clock);
     };
   }, []);
+
+  // Group by country; stations without one fall into "Other". The primary
+  // station's country is shown first, then the rest alphabetically.
+  const groups = new Map<string, StationWithLatest[]>();
+  for (const s of stations) {
+    const key = s.country ?? "Other";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(s);
+  }
+  const primaryCountry = stations.find((s) => s.is_primary)?.country ?? null;
+  const countries = Array.from(groups.keys()).sort((a, b) => {
+    if (a === primaryCountry) return -1;
+    if (b === primaryCountry) return 1;
+    if (a === "Other") return 1;
+    if (b === "Other") return -1;
+    return a.localeCompare(b);
+  });
 
   return (
     <main className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
@@ -84,69 +169,19 @@ export default function Home() {
           </a>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {stations.map((s) => {
-            const stale =
-              s.latest &&
-              (Date.now() - new Date(s.latest.observed_at).getTime()) / 60000 >
-                (s.source === "weathercloud" ? 120 : 30);
-            return (
-              <a
-                key={s.id}
-                href={`/station/${s.id}`}
-                className="group bg-white rounded-xl p-5 border border-slate-200 hover:border-sky-300 hover:shadow-sm transition-all"
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-slate-900 truncate">{s.name}</span>
-                      {s.is_primary && (
-                        <span className="text-xs bg-sky-50 text-sky-700 px-2 py-0.5 rounded-full shrink-0">
-                          Primary
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-xs text-slate-400 mt-0.5">
-                      {s.source === "weathercloud" ? s.source_id : s.wunderground_id}
-                    </div>
-                  </div>
-                  <span className="text-slate-300 group-hover:text-sky-400 transition-colors text-lg leading-none">
-                    ›
-                  </span>
-                </div>
-
-                {s.latest ? (
-                  <>
-                    <div className="flex items-end justify-between">
-                      <div className="text-4xl font-semibold tracking-tight text-slate-900 leading-none">
-                        {s.latest.temp_c !== null ? `${s.latest.temp_c}°` : "—"}
-                      </div>
-                      {s.latest.temp_indoor_c !== null && (
-                        <div className="text-xs text-slate-500 pb-1">
-                          Indoor <span className="font-medium text-slate-700">{s.latest.temp_indoor_c}°</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-2 gap-3 mt-4">
-                      <Stat label="Wind (1 hr avg)" value={s.avg_wind_kph} unit="km/h" />
-                      <Stat label="Rain today" value={s.latest.precip_total_mm} unit="mm" />
-                    </div>
-                    <div
-                      className={`text-xs mt-4 flex items-center gap-1.5 ${
-                        stale ? "text-amber-600" : "text-slate-400"
-                      }`}
-                    >
-                      {stale && <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500" />}
-                      {stale ? "Stale · " : ""}
-                      {relativeTime(s.latest.observed_at)}
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-sm text-slate-400 py-4">No data yet</div>
-                )}
-              </a>
-            );
-          })}
+        <div className="space-y-8">
+          {countries.map((country) => (
+            <section key={country}>
+              <h2 className="text-sm font-medium text-slate-500 uppercase tracking-wide mb-3">
+                {country}
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {groups.get(country)!.map((s) => (
+                  <StationCard key={s.id} s={s} now={now} />
+                ))}
+              </div>
+            </section>
+          ))}
         </div>
       )}
     </main>

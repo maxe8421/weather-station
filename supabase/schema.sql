@@ -13,6 +13,8 @@ create table stations (
   is_primary boolean default false,
   source text not null default 'wunderground',
   source_id text,
+  timezone text,
+  country text,
   created_at timestamptz default now()
 );
 
@@ -203,6 +205,8 @@ values ('Kingston', 'IKINGS664', 'wunderground', 'IKINGS664', true);
 --
 --   alter table stations add column if not exists source text not null default 'wunderground';
 --   alter table stations add column if not exists source_id text;
+--   alter table stations add column if not exists timezone text;
+--   alter table stations add column if not exists country text;
 --   alter table weather_readings add column if not exists temp_indoor_c double precision;
 --   alter table weather_readings add column if not exists humidity_indoor integer;
 --   alter table stations drop constraint if exists stations_wunderground_id_key;

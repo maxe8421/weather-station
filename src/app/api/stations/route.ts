@@ -3,6 +3,7 @@ import { getSupabaseAdmin, getSupabasePublic } from "@/lib/supabase";
 import { fetchCurrentObservation } from "@/lib/wunderground";
 import { fetchWeathercloudCoordinates } from "@/lib/weathercloud";
 import { isAuthorised, isValidUuid } from "@/lib/auth";
+import { geoFromCoords } from "@/lib/geo";
 
 export async function GET() {
   const { data, error } = await getSupabasePublic()
@@ -51,6 +52,7 @@ export async function POST(request: NextRequest) {
         { status: 404 }
       );
     }
+    const geo = geoFromCoords(obs.lat, obs.lon);
     const { data, error } = await admin
       .from("stations")
       .insert({
@@ -60,6 +62,8 @@ export async function POST(request: NextRequest) {
         source_id: wuId,
         latitude: obs.lat,
         longitude: obs.lon,
+        timezone: geo.timezone,
+        country: geo.country,
       })
       .select()
       .single();
@@ -73,6 +77,7 @@ export async function POST(request: NextRequest) {
   const isMetar = /^[a-z]{4}$/i.test(rawId);
   const sourceId = isMetar ? rawId.toUpperCase() : rawId;
   const coords = await fetchWeathercloudCoordinates(sourceId);
+  const geo = coords ? geoFromCoords(coords.latitude, coords.longitude) : { timezone: null, country: null };
 
   const { data, error } = await admin
     .from("stations")
@@ -83,6 +88,8 @@ export async function POST(request: NextRequest) {
       source_id: sourceId,
       latitude: coords?.latitude ?? null,
       longitude: coords?.longitude ?? null,
+      timezone: geo.timezone,
+      country: geo.country,
     })
     .select()
     .single();
