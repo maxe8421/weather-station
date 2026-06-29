@@ -19,7 +19,7 @@ export async function GET() {
   for (const station of stations) {
     const { data: readings } = await supabase
       .from("weather_readings")
-      .select("temp_c, wind_speed_kph, precip_total_mm, observed_at")
+      .select("temp_c, wind_speed_kph, precip_total_mm, temp_indoor_c, observed_at")
       .eq("station_id", station.id)
       .order("observed_at", { ascending: false })
       .limit(1);

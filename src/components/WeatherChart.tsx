@@ -16,8 +16,8 @@ const CHART_CONFIGS: ChartConfig[] = [
   {
     title: "Temperature",
     fields: [
-      { key: "temp_c", label: "Temperature", color: "#ef4444" },
-      { key: "feels_like_c", label: "Feels Like", color: "#f97316" },
+      { key: "temp_c", label: "Outdoor", color: "#ef4444" },
+      { key: "temp_indoor_c", label: "Indoor", color: "#f97316" },
       { key: "dewpoint_c", label: "Dew Point", color: "#3b82f6" },
     ],
     unit: "°C",

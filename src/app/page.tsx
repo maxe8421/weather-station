@@ -6,6 +6,7 @@ import { Station } from "@/lib/types";
 interface StationWithLatest extends Station {
   latest: {
     temp_c: number | null;
+    temp_indoor_c: number | null;
     wind_speed_kph: number | null;
     precip_total_mm: number | null;
     observed_at: string;
@@ -67,13 +68,21 @@ export default function Home() {
                 </div>
 
                 {s.latest ? (
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <div className="text-xs text-gray-400 mb-1">Temp</div>
+                      <div className="text-xs text-gray-400 mb-1">Outdoor</div>
                       <div className="text-xl font-semibold">
                         {s.latest.temp_c !== null ? `${s.latest.temp_c}°` : "—"}
                       </div>
                     </div>
+                    {s.latest.temp_indoor_c !== null && (
+                      <div>
+                        <div className="text-xs text-gray-400 mb-1">Indoor</div>
+                        <div className="text-xl font-semibold">
+                          {`${s.latest.temp_indoor_c}°`}
+                        </div>
+                      </div>
+                    )}
                     <div>
                       <div className="text-xs text-gray-400 mb-1">Wind</div>
                       <div className="text-xl font-semibold">
