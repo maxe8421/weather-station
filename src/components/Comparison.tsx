@@ -84,11 +84,20 @@ function defaultAnchors(gran: Gran, now: Date): [string, string] {
     return [toYmd(now), toYmd(lastWk)];
   }
   if (gran === "month") {
-    const mm = (n: number) => `${n < 0 ? y - 1 : y}-${String(((m + n) % 12 + 12) % 12 + 1).padStart(2, "0")}`;
-    return [mm(0), mm(-1)];
+    const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    return [fmt(new Date(y, m, 1)), fmt(new Date(y, m - 1, 1))];
   }
   return [`${y}`, `${y - 1}`];
 }
+
+// Anchor string formats per granularity, used to skip a stale render after the
+// granularity changes but before the default anchors reset.
+const ANCHOR_RE: Record<Gran, RegExp> = {
+  day: /^\d{4}-\d{2}-\d{2}$/,
+  week: /^\d{4}-\d{2}-\d{2}$/,
+  month: /^\d{4}-\d{2}$/,
+  year: /^\d{4}$/,
+};
 
 // ---- metrics -------------------------------------------------------------
 
@@ -141,7 +150,7 @@ export default function Comparison({
 
   const resolved: Resolved | null = useMemo(() => {
     if (mode === "quick") return presetWindow(preset, new Date());
-    if (!aAnchor || !bAnchor) return null;
+    if (!ANCHOR_RE[gran].test(aAnchor) || !ANCHOR_RE[gran].test(bAnchor)) return null;
     const a = windowFor(gran, aAnchor);
     const b = windowFor(gran, bAnchor);
     return { aFrom: a.from, aTo: a.to, bFrom: b.from, bTo: b.to, aLabel: a.label, bLabel: b.label, gran };
