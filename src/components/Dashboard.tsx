@@ -6,6 +6,7 @@ import TimeRangeSelector from "./TimeRangeSelector";
 import CurrentConditions from "./CurrentConditions";
 import WeatherCharts from "./WeatherChart";
 import StationMap from "./StationMap";
+import Comparison from "./Comparison";
 import { CardSkeleton, ChartSkeleton } from "./ui";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
 import { relativeTime, localTime, dayBounds, weekBounds, windowLabel } from "@/lib/time";
@@ -21,6 +22,7 @@ export default function Dashboard({ stationId }: { stationId: string }) {
   const [range, setRange] = useState<TimeRange>("24h");
   const [customDate, setCustomDate] = useState<string | null>(null);
   const [customKind, setCustomKind] = useState<CustomKind>("day");
+  const [compareMode, setCompareMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
@@ -154,8 +156,20 @@ export default function Dashboard({ stationId }: { stationId: string }) {
         </div>
 
         <div className="flex flex-col items-stretch sm:items-end gap-2">
-          <TimeRangeSelector selected={customDate ? null : range} onSelect={selectPreset} />
           <div className="flex items-center gap-2">
+            <TimeRangeSelector selected={customDate ? null : range} onSelect={selectPreset} />
+            <button
+              onClick={() => setCompareMode((v) => !v)}
+              className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                compareMode
+                  ? "bg-sky-600 text-white border-sky-600"
+                  : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+              }`}
+            >
+              Compare
+            </button>
+          </div>
+          <div className={`flex items-center gap-2 ${compareMode ? "opacity-40 pointer-events-none" : ""}`}>
             <input
               type="date"
               min={minStr}
@@ -191,7 +205,9 @@ export default function Dashboard({ stationId }: { stationId: string }) {
         </div>
       </div>
 
-      {loading ? (
+      {compareMode ? (
+        <Comparison stationId={stationId} />
+      ) : loading ? (
         <div className="space-y-5">
           <CardSkeleton />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
