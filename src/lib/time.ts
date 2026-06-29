@@ -1,3 +1,35 @@
+/** [start, end) for the calendar day containing dateStr (YYYY-MM-DD), local time. */
+export function dayBounds(dateStr: string): [Date, Date] {
+  const from = new Date(`${dateStr}T00:00:00`);
+  const to = new Date(from);
+  to.setDate(from.getDate() + 1);
+  return [from, to];
+}
+
+/** [start, end) for the Monday–Sunday week containing dateStr, local time. */
+export function weekBounds(dateStr: string): [Date, Date] {
+  const d = new Date(`${dateStr}T00:00:00`);
+  const dow = (d.getDay() + 6) % 7; // Monday = 0
+  const from = new Date(d);
+  from.setDate(d.getDate() - dow);
+  const to = new Date(from);
+  to.setDate(from.getDate() + 7);
+  return [from, to];
+}
+
+/** Human label for a custom day/week window. */
+export function windowLabel(dateStr: string, kind: "day" | "week"): string {
+  if (kind === "day") {
+    return new Date(`${dateStr}T00:00:00`).toLocaleDateString([], {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    });
+  }
+  const [from] = weekBounds(dateStr);
+  return `Week of ${from.toLocaleDateString([], { day: "numeric", month: "long" })}`;
+}
+
 /** Current wall-clock time at a station's timezone, e.g. "14:32". */
 export function localTime(timezone: string | null, now: Date = new Date()): string | null {
   if (!timezone) return null;

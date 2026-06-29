@@ -45,7 +45,6 @@ export async function GET(request: NextRequest) {
   const range: TimeRange = VALID_RANGES.includes(rangeParam) ? rangeParam : "24h";
 
   const supabase = getSupabasePublic();
-  const from = windowStart(range, Date.now());
 
   // Current conditions stay live regardless of range.
   const latestPromise = supabase
@@ -55,6 +54,34 @@ export async function GET(request: NextRequest) {
     .order("observed_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  // Custom window (calendar day/week access). Returns raw rows within an
+  // explicit [from, to) window; the client buckets by span. A week is ~1008
+  // rows, comfortably under the cap.
+  const fromParam = params.get("from");
+  const toParam = params.get("to");
+  if (fromParam && toParam) {
+    const fromD = new Date(fromParam);
+    const toD = new Date(toParam);
+    if (isNaN(fromD.getTime()) || isNaN(toD.getTime()) || fromD >= toD) {
+      return NextResponse.json({ error: "Invalid from/to range" }, { status: 400 });
+    }
+    const [{ data, error }, { data: latest }] = await Promise.all([
+      supabase
+        .from("weather_readings")
+        .select("*")
+        .eq("station_id", stationId)
+        .gte("observed_at", fromD.toISOString())
+        .lt("observed_at", toD.toISOString())
+        .order("observed_at", { ascending: true })
+        .limit(1500),
+      latestPromise,
+    ]);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ mode: "raw", data: data ?? [], latest: latest ?? null });
+  }
+
+  const from = windowStart(range, Date.now());
 
   // 30d: aggregate from raw on the server (raw is within the 90-day retention
   // window) — keeps the chart live while shrinking the payload to ~30 rows.

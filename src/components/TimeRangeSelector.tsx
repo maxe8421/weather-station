@@ -11,7 +11,7 @@ const RANGES: { value: TimeRange; label: string }[] = [
 ];
 
 interface Props {
-  selected: TimeRange;
+  selected: TimeRange | null;
   onSelect: (range: TimeRange) => void;
 }
 
