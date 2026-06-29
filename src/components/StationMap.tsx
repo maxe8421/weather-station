@@ -16,23 +16,23 @@ export default function StationMap({ latitude, longitude, name }: Props) {
   const link = `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=13/${latitude}/${longitude}`;
 
   return (
-    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="font-medium">Location</h3>
+    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 w-full sm:max-w-xs">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="font-medium text-sm">Location</h3>
         <a
           href={link}
           target="_blank"
           rel="noopener noreferrer"
           className="text-xs text-blue-600 hover:text-blue-800"
         >
-          View larger map
+          Larger map
         </a>
       </div>
       <iframe
         title={`Map showing the location of ${name}`}
         src={src}
         loading="lazy"
-        className="w-full h-[220px] rounded-lg border border-gray-100"
+        className="w-full h-[120px] rounded-lg border border-gray-100"
       />
       <div className="text-xs text-gray-400 mt-2">
         {latitude.toFixed(4)}, {longitude.toFixed(4)}
