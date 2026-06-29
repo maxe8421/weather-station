@@ -110,7 +110,19 @@ const PRESET_LABELS: { value: Preset; label: string }[] = [
 
 const num = (v: number | null | undefined): v is number => v !== null && v !== undefined;
 
-export default function Comparison({ stationId }: { stationId: string }) {
+interface DataRange {
+  min: string;
+  max: string;
+  dailyMin: string | null;
+}
+
+export default function Comparison({
+  stationId,
+  dataRange,
+}: {
+  stationId: string;
+  dataRange: DataRange | null;
+}) {
   const [mode, setMode] = useState<Mode>("quick");
   const [preset, setPreset] = useState<Preset>("mom");
   const [gran, setGran] = useState<Gran>("month");
@@ -218,6 +230,18 @@ export default function Comparison({ stationId }: { stationId: string }) {
     "px-3 py-1.5 border border-slate-200 rounded-lg bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-200";
   const xLabel = (idx: number) => (isRaw ? `${String(idx).padStart(2, "0")}:00` : `Day ${idx}`);
 
+  // Selectable bounds: Day reads raw data (90-day limit); Week/Month/Year read
+  // the rollup (full retained history).
+  const bounds = useMemo(() => {
+    if (!dataRange) return null;
+    const floor90 = toYmd(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000));
+    const rawMin = toYmd(new Date(dataRange.min));
+    const dailyMin = dataRange.dailyMin ?? rawMin;
+    const max = toYmd(new Date(dataRange.max));
+    const min = gran === "day" ? (rawMin > floor90 ? rawMin : floor90) : dailyMin;
+    return { min, max };
+  }, [dataRange, gran]);
+
   return (
     <div className="space-y-6">
       {/* Mode + selection controls */}
@@ -258,12 +282,18 @@ export default function Comparison({ stationId }: { stationId: string }) {
               <option value="month">Month</option>
               <option value="year">Year</option>
             </select>
-            <PeriodInput gran={gran} value={aAnchor} onChange={setAAnchor} className={inputClass} />
+            <PeriodInput gran={gran} value={aAnchor} onChange={setAAnchor} className={inputClass} bounds={bounds} />
             <span className="text-sm text-slate-400">vs</span>
-            <PeriodInput gran={gran} value={bAnchor} onChange={setBAnchor} className={inputClass} />
+            <PeriodInput gran={gran} value={bAnchor} onChange={setBAnchor} className={inputClass} bounds={bounds} />
           </div>
         )}
       </div>
+
+      {mode === "custom" && bounds && (
+        <p className="text-xs text-slate-400 -mt-1">
+          Data available {new Date(`${bounds.min}T00:00:00`).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" })} – {new Date(`${bounds.max}T00:00:00`).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" })}
+        </p>
+      )}
 
       {resolved && (
         <div className="text-sm text-slate-500">
@@ -357,20 +387,30 @@ export default function Comparison({ stationId }: { stationId: string }) {
 }
 
 function PeriodInput({
-  gran, value, onChange, className,
+  gran, value, onChange, className, bounds,
 }: {
   gran: Gran; value: string; onChange: (v: string) => void; className: string;
+  bounds: { min: string; max: string } | null;
 }) {
   if (gran === "month") {
-    return <input type="month" value={value} onChange={(e) => onChange(e.target.value)} className={className} />;
+    return (
+      <input
+        type="month"
+        min={bounds ? bounds.min.slice(0, 7) : undefined}
+        max={bounds ? bounds.max.slice(0, 7) : undefined}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={className}
+      />
+    );
   }
   if (gran === "year") {
     const thisYear = new Date().getFullYear();
     return (
       <input
         type="number"
-        min={2000}
-        max={thisYear}
+        min={bounds ? Number(bounds.min.slice(0, 4)) : 2000}
+        max={bounds ? Number(bounds.max.slice(0, 4)) : thisYear}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={`${className} w-24`}
@@ -378,5 +418,14 @@ function PeriodInput({
     );
   }
   // day / week → a date
-  return <input type="date" value={value} onChange={(e) => onChange(e.target.value)} className={className} />;
+  return (
+    <input
+      type="date"
+      min={bounds?.min}
+      max={bounds?.max}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={className}
+    />
+  );
 }

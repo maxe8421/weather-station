@@ -24,7 +24,7 @@ export default function Dashboard({ stationId }: { stationId: string }) {
   const [customDate, setCustomDate] = useState<string | null>(null);
   const [customKind, setCustomKind] = useState<CustomKind>("day");
   const [compareMode, setCompareMode] = useState(false);
-  const [dataRange, setDataRange] = useState<{ min: string; max: string } | null>(null);
+  const [dataRange, setDataRange] = useState<{ min: string; max: string; dailyMin: string | null } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
@@ -53,7 +53,7 @@ export default function Dashboard({ stationId }: { stationId: string }) {
     fetch(`/api/data-range?station_id=${stationId}`)
       .then((r) => r.json())
       .then((d) => {
-        if (d?.min && d?.max) setDataRange({ min: d.min, max: d.max });
+        if (d?.min && d?.max) setDataRange({ min: d.min, max: d.max, dailyMin: d.dailyMin ?? null });
       })
       .catch(() => {});
   }, [stationId]);
@@ -230,7 +230,7 @@ export default function Dashboard({ stationId }: { stationId: string }) {
       </div>
 
       {compareMode ? (
-        <Comparison stationId={stationId} />
+        <Comparison stationId={stationId} dataRange={dataRange} />
       ) : loading ? (
         <div className="space-y-5">
           <CardSkeleton />
