@@ -10,9 +10,10 @@ It is built to run on Vercel's free tier with a free Supabase Postgres database 
 - **Multi-source ingestion** — pulls from the Weather Underground PWS API, public Weathercloud devices, and Weathercloud METAR (airport) stations.
 - **Indoor metrics** — captures indoor temperature and humidity for your own station by authenticating against Weathercloud (data the public APIs do not expose).
 - **Multi-station** — track any number of stations worldwide; add or remove them from a password-protected management page.
-- **Overview home page** — a card per station showing current outdoor temperature, indoor temperature (where available), 1-hour average wind speed, rainfall, and a one-line plain-English summary of the day (today's high/low, rainfall, and peak gust).
-- **Per-station dashboard** — current-conditions cards plus time-series charts for temperature (outdoor/indoor/dew point), humidity, pressure, wind speed, rainfall, wind direction, UV/solar radiation, and daily hours of sunshine.
-- **Rule-based summaries** — deterministic, plain-English summaries of any window (no LLM, no API cost): warmest/coldest points, rainfall and wet days, peak gust, pressure trend, and hours of sunshine. Shown on both the home page (per card) and each station's detail view.
+- **Overview home page** — a card per station showing current outdoor temperature, indoor temperature (where available), 1-hour average wind speed, rainfall, and a one-line plain-English summary of the day (today's high/low, rainfall, and peak gust). Stations are grouped by region, with a per-region summary header and a cross-region comparison (warmest vs coolest region right now).
+- **Per-station dashboard** — current-conditions cards (including a compass dial for wind direction) plus time-series charts for temperature (outdoor/indoor/dew point), humidity, pressure, wind speed, rainfall, wind direction, a wind rose, UV/solar radiation, and daily hours of sunshine.
+- **Station-vs-station comparison** — a dedicated `/compare` view overlays 2–6 stations on shared per-metric charts (temperature, rainfall, sunshine, wind, humidity, pressure) over a chosen window, with a side-by-side aggregate table.
+- **Rule-based summaries** — deterministic, plain-English summaries of any window (no LLM, no API cost): warmest/coldest points, rainfall and wet days, peak gust, pressure trend, and hours of sunshine. Shown on both the home page (per card and per region) and each station's detail view.
 - **Hours of sunshine** — bright-sunshine duration derived from solar radiation using the WMO ≥120 W/m² threshold, charted per day and rolled up into the daily history (mirrors Weathercloud's "hours" figure under Solar Radiation).
 - **Adaptive aggregation** — raw 10-minute points for 24h, 6-hour buckets for 7d, daily averages for 30d and longer; temperature additionally shows daily min/avg/max, and wind direction is shown as an hourly circular (vector) mean on the 24h view rather than a hard-to-read scatter of raw points.
 - **Auto-refresh** — the UI re-polls every 60 seconds with no manual reload.
@@ -160,6 +161,12 @@ curl -s "http://localhost:3000/api/latest" | python3 -m json.tool
 
 # 14. Daily readings include `sunshine_hours` (null until rollup_daily has run)
 curl -s "http://localhost:3000/api/readings?station_id=<uuid>&range=30d" | python3 -m json.tool
+
+# 15. Station-vs-station comparison — daily series per station
+curl -s "http://localhost:3000/api/compare-stations?ids=<uuid1>,<uuid2>&range=30d" | python3 -m json.tool
+
+# 16. compare-stations rejects bad input — expect 400
+curl -i "http://localhost:3000/api/compare-stations?ids=not-a-uuid"
 ```
 
 A production hardening pass should add a runner (Vitest or Jest) covering: the `range`→date-window mapping and row limits in `/api/readings`; circular wind averaging, hourly wind-direction bucketing, and the sunshine-hours threshold logic in `src/lib/utils.ts`; the rule-based summary phrasing in `src/lib/summary.ts`; the Wunderground and Weathercloud/METAR field mapping; and the auth guards on `/api/collect` and `/api/stations`.
@@ -177,18 +184,24 @@ weather-station/
 │   │   ├── globals.css         # Tailwind entry + base styles
 │   │   ├── station/[id]/
 │   │   │   └── page.tsx        # Per-station detail route
+│   │   ├── compare/
+│   │   │   └── page.tsx        # Station-vs-station comparison view
 │   │   ├── stations/
 │   │   │   └── page.tsx        # Password-gated add/remove stations UI
 │   │   └── api/
-│   │       ├── collect/route.ts   # Cron target: fetch all sources → upsert
-│   │       ├── readings/route.ts  # Time-ranged reads for charts
-│   │       ├── latest/route.ts    # Per-station latest + 1h avg wind
-│   │       ├── stations/route.ts  # List (public) / add / delete (admin)
-│   │       └── health/route.ts    # Staleness check for monitoring
+│   │       ├── collect/route.ts          # Cron target: fetch all sources → upsert
+│   │       ├── readings/route.ts         # Time-ranged reads for charts
+│   │       ├── latest/route.ts           # Per-station latest + 1h avg wind + daily summary
+│   │       ├── compare/route.ts          # Two time-windows of one station
+│   │       ├── compare-stations/route.ts # Daily series for several stations (one window)
+│   │       ├── stations/route.ts         # List (public) / add / delete (admin)
+│   │       └── health/route.ts           # Staleness check for monitoring
 │   ├── components/
 │   │   ├── Dashboard.tsx          # Orchestrates a station's detail view
 │   │   ├── CurrentConditions.tsx  # Current-reading metric cards
 │   │   ├── WeatherChart.tsx       # All chart panels + aggregation wiring
+│   │   ├── Compass.tsx            # SVG wind-direction compass dial
+│   │   ├── Comparison.tsx         # Single-station time-period comparison
 │   │   ├── StationPicker.tsx      # Station dropdown
 │   │   └── TimeRangeSelector.tsx  # 24h/7d/30d/1y/all toggle
 │   └── lib/

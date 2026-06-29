@@ -94,7 +94,9 @@ export function hourlyWindDirection(
  * WMO threshold; gaps are capped so a missing run of readings can't inflate the
  * total. Returns null when the station reports no solar data.
  */
-export function sunshineHours(readings: WeatherReading[]): number | null {
+export function sunshineHours(
+  readings: { observed_at: string; solar_radiation: number | null }[]
+): number | null {
   const pts = readings
     .filter((r) => r.solar_radiation !== null)
     .map((r) => ({ t: new Date(r.observed_at).getTime(), s: r.solar_radiation as number }))

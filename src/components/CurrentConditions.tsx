@@ -2,6 +2,7 @@
 
 import { WeatherReading } from "@/lib/types";
 import { windDirToCompass } from "@/lib/utils";
+import Compass from "./Compass";
 
 function Metric({ label, value, unit }: { label: string; value: string | number | null; unit?: string }) {
   return (
@@ -87,10 +88,21 @@ export default function CurrentConditions({
       <Group title="Wind">
         <Metric label="Wind Speed" value={reading.wind_speed_kph} unit={`km/h ${compass}`} />
         <Metric label="Wind Gust" value={reading.wind_gust_kph} unit="km/h" />
-        <Metric
-          label="Direction"
-          value={reading.wind_dir !== null ? `${reading.wind_dir}° ${compass}` : null}
-        />
+        <div className="bg-white rounded-xl p-4 border border-slate-200 flex items-center gap-3">
+          <Compass deg={reading.wind_dir} size={60} />
+          <div className="min-w-0">
+            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Direction</div>
+            <div className="text-2xl font-semibold text-slate-900 mt-1">
+              {reading.wind_dir !== null ? (
+                <>
+                  {reading.wind_dir}°<span className="text-sm font-normal text-slate-400 ml-1">{compass}</span>
+                </>
+              ) : (
+                <span className="text-slate-300">—</span>
+              )}
+            </div>
+          </div>
+        </div>
       </Group>
 
       <Group title="Rain & sky">
