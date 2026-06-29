@@ -11,6 +11,7 @@ interface StationWithLatest extends Station {
     precip_total_mm: number | null;
     observed_at: string;
   } | null;
+  avg_wind_kph: number | null;
 }
 
 export default function Home() {
@@ -84,11 +85,11 @@ export default function Home() {
                       </div>
                     )}
                     <div>
-                      <div className="text-xs text-gray-400 mb-1">Wind</div>
+                      <div className="text-xs text-gray-400 mb-1">Wind (1hr avg)</div>
                       <div className="text-xl font-semibold">
-                        {s.latest.wind_speed_kph !== null ? (
+                        {s.avg_wind_kph !== null ? (
                           <>
-                            {s.latest.wind_speed_kph}
+                            {s.avg_wind_kph}
                             <span className="text-xs font-normal text-gray-400 ml-0.5">km/h</span>
                           </>
                         ) : "—"}
