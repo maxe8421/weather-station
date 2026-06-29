@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { fetchWeathercloudCoordinates } from "@/lib/weathercloud";
+import { fetchCurrentObservation } from "@/lib/wunderground";
 import { geoFromCoords } from "@/lib/geo";
 import { isAuthorised } from "@/lib/auth";
 import { mapLimit } from "@/lib/http";
@@ -9,6 +10,7 @@ interface Row {
   id: string;
   source: string;
   source_id: string | null;
+  wunderground_id: string | null;
   latitude: number | null;
   longitude: number | null;
   timezone: string | null;
@@ -28,7 +30,7 @@ export async function POST(request: NextRequest) {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("stations")
-    .select("id, source, source_id, latitude, longitude, timezone")
+    .select("id, source, source_id, wunderground_id, latitude, longitude, timezone")
     .or("latitude.is.null,timezone.is.null");
 
   if (error) {
@@ -43,12 +45,21 @@ export async function POST(request: NextRequest) {
     let lat = station.latitude;
     let lon = station.longitude;
 
-    // Weathercloud stations may still be missing coordinates — scrape them.
-    if ((lat === null || lon === null) && station.source === "weathercloud" && station.source_id) {
-      const coords = await fetchWeathercloudCoordinates(station.source_id);
-      if (coords) {
-        lat = coords.latitude;
-        lon = coords.longitude;
+    // Fill missing coordinates: Weathercloud from its profile page, Wunderground
+    // from its current observation.
+    if (lat === null || lon === null) {
+      if (station.source === "weathercloud" && station.source_id) {
+        const coords = await fetchWeathercloudCoordinates(station.source_id);
+        if (coords) {
+          lat = coords.latitude;
+          lon = coords.longitude;
+        }
+      } else if (station.wunderground_id) {
+        const obs = await fetchCurrentObservation(station.wunderground_id);
+        if (obs) {
+          lat = obs.lat;
+          lon = obs.lon;
+        }
       }
     }
 
