@@ -11,6 +11,7 @@ import { CardSkeleton, ChartSkeleton, SummaryCard } from "./ui";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
 import { relativeTime, localTime, dayBounds, weekBounds, windowLabel, toYmd } from "@/lib/time";
 import { summarizePeriod, summarizeDaily } from "@/lib/summary";
+import { sunshineByDay } from "@/lib/utils";
 
 const RANGE_LABEL: Record<string, string> = {
   "24h": "the last 24 hours",
@@ -145,6 +146,19 @@ export default function Dashboard({ stationId }: { stationId: string }) {
   const dateInputClass =
     "px-3 py-1.5 border border-slate-200 rounded-lg bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-200";
 
+  // Hours of bright sunshine accumulated so far today, for the current-conditions
+  // card. Daily modes read the latest rollup row; raw modes derive it in-browser
+  // from the most recent day's solar readings.
+  const sunshineToday =
+    mode === "daily"
+      ? daily.length
+        ? daily[daily.length - 1].sunshine_hours
+        : null
+      : (() => {
+          const days = sunshineByDay(readings, chartRange);
+          return days.length ? days[days.length - 1].hours : null;
+        })();
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
@@ -266,6 +280,7 @@ export default function Dashboard({ stationId }: { stationId: string }) {
         <>
           <CurrentConditions
             reading={latest}
+            sunshineToday={sunshineToday}
             afterHero={
               <SummaryCard
                 lines={

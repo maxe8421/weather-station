@@ -33,9 +33,12 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
 export default function CurrentConditions({
   reading,
   afterHero,
+  sunshineToday,
 }: {
   reading: WeatherReading | null;
   afterHero?: React.ReactNode;
+  /** Hours of bright sunshine accumulated so far today (null if no solar sensor). */
+  sunshineToday?: number | null;
 }) {
   if (!reading) {
     return (
@@ -96,6 +99,7 @@ export default function CurrentConditions({
         <Metric label="Pressure" value={reading.pressure_mb} unit="hPa" />
         <Metric label="UV Index" value={reading.uv} />
         <Metric label="Solar" value={reading.solar_radiation} unit="W/m²" />
+        <Metric label="Sunshine" value={sunshineToday ?? null} unit="hrs" />
       </Group>
     </div>
   );
