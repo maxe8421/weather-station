@@ -26,31 +26,53 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { name, wunderground_id } = body;
+  const { name, source, station_id } = body;
 
-  if (!name || !wunderground_id) {
+  if (!name || !station_id) {
     return NextResponse.json(
-      { error: "name and wunderground_id are required" },
+      { error: "name and station_id are required" },
       { status: 400 }
     );
   }
 
-  // Verify the station exists on Wunderground
-  const obs = await fetchCurrentObservation(wunderground_id);
-  if (!obs) {
-    return NextResponse.json(
-      { error: "Station not found on Weather Underground" },
-      { status: 404 }
-    );
+  const stationSource = source || "wunderground";
+
+  if (stationSource === "wunderground") {
+    const obs = await fetchCurrentObservation(station_id);
+    if (!obs) {
+      return NextResponse.json(
+        { error: "Station not found on Weather Underground" },
+        { status: 404 }
+      );
+    }
+
+    const { data, error } = await getSupabaseAdmin()
+      .from("stations")
+      .insert({
+        name,
+        wunderground_id: station_id.toUpperCase(),
+        source: "wunderground",
+        source_id: station_id.toUpperCase(),
+        latitude: obs.lat,
+        longitude: obs.lon,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    return NextResponse.json(data, { status: 201 });
   }
 
+  // Weathercloud station
   const { data, error } = await getSupabaseAdmin()
     .from("stations")
     .insert({
       name,
-      wunderground_id: wunderground_id.toUpperCase(),
-      latitude: obs.lat,
-      longitude: obs.lon,
+      wunderground_id: `WC-${station_id}`,
+      source: "weathercloud",
+      source_id: station_id,
     })
     .select()
     .single();
@@ -58,7 +80,6 @@ export async function POST(request: NextRequest) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-
   return NextResponse.json(data, { status: 201 });
 }
 
@@ -73,7 +94,7 @@ export async function DELETE(request: NextRequest) {
     .from("stations")
     .delete()
     .eq("id", id)
-    .eq("is_primary", false); // Prevent deleting primary station
+    .eq("is_primary", false);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

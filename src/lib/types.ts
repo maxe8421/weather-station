@@ -5,6 +5,8 @@ export interface Station {
   latitude: number | null;
   longitude: number | null;
   is_primary: boolean;
+  source: "wunderground" | "weathercloud";
+  source_id: string | null;
   created_at: string;
 }
 

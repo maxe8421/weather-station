@@ -29,7 +29,9 @@ function getCsrfFromCookies(map: Map<string, string>): string | null {
   return decodeURIComponent(csrf.split("=").slice(1).join("="));
 }
 
-async function login(): Promise<string> {
+async function ensureLoggedIn(): Promise<void> {
+  if (cachedCookie) return;
+
   const signinPage = await fetch("https://app.weathercloud.net/signin", {
     redirect: "manual",
   });
@@ -67,37 +69,53 @@ async function login(): Promise<string> {
   const finalCookies = new Map([...merged, ...followCookies]);
 
   cachedCsrf = getCsrfFromCookies(finalCookies);
-  return cookieMapToString(finalCookies);
+  cachedCookie = cookieMapToString(finalCookies);
 }
 
-export interface WeathercloudData {
+export interface WeathercloudValues {
+  epoch: number;
   tempin: number | null;
   humin: number | null;
+  temp: number | null;
+  hum: number | null;
+  dew: number | null;
+  dewin: number | null;
+  chill: number | null;
+  heat: number | null;
+  heatin: number | null;
+  bar: number | null;
+  wspd: number | null;
+  wspdhi: number | null;
+  wdir: number | null;
+  wspdavg: number | null;
+  wdiravg: number | null;
+  rainrate: number | null;
+  rain: number | null;
+  solarrad: number | null;
+  uvi: number | null;
 }
 
-export async function fetchWeathercloudIndoor(): Promise<WeathercloudData | null> {
+async function fetchDeviceValues(deviceId: string): Promise<WeathercloudValues | null> {
   try {
-    if (!cachedCookie) {
-      cachedCookie = await login();
-    }
+    await ensureLoggedIn();
 
     const headers: Record<string, string> = {
-      Cookie: cachedCookie,
+      Cookie: cachedCookie!,
       "X-Requested-With": "XMLHttpRequest",
     };
 
     const csrfParam = cachedCsrf ? `?WEATHERCLOUD_CSRF_TOKEN=${encodeURIComponent(cachedCsrf)}` : "";
-    let url = `https://app.weathercloud.net/device/values/${WC_DEVICE_ID}${csrfParam}`;
+    let url = `https://app.weathercloud.net/device/values/${deviceId}${csrfParam}`;
 
     let res = await fetch(url, { headers, cache: "no-store" });
     let text = await res.text();
 
     if (!text.startsWith("{")) {
       cachedCookie = null;
-      cachedCookie = await login();
-      headers.Cookie = cachedCookie;
+      await ensureLoggedIn();
+      headers.Cookie = cachedCookie!;
       const csrfParam2 = cachedCsrf ? `?WEATHERCLOUD_CSRF_TOKEN=${encodeURIComponent(cachedCsrf)}` : "";
-      url = `https://app.weathercloud.net/device/values/${WC_DEVICE_ID}${csrfParam2}`;
+      url = `https://app.weathercloud.net/device/values/${deviceId}${csrfParam2}`;
       res = await fetch(url, { headers, cache: "no-store" });
       text = await res.text();
     }
@@ -106,15 +124,47 @@ export async function fetchWeathercloudIndoor(): Promise<WeathercloudData | null
       return null;
     }
 
-    const data = JSON.parse(text);
-    return {
-      tempin: data.tempin ?? null,
-      humin: data.humin ?? null,
-    };
+    return JSON.parse(text);
   } catch (err) {
     console.error("Weathercloud error:", err);
     cachedCookie = null;
     cachedCsrf = null;
     return null;
   }
+}
+
+export interface WeathercloudIndoorData {
+  tempin: number | null;
+  humin: number | null;
+}
+
+export async function fetchWeathercloudIndoor(): Promise<WeathercloudIndoorData | null> {
+  const data = await fetchDeviceValues(WC_DEVICE_ID);
+  if (!data) return null;
+  return { tempin: data.tempin ?? null, humin: data.humin ?? null };
+}
+
+export async function fetchWeathercloudStation(deviceId: string) {
+  const data = await fetchDeviceValues(deviceId);
+  if (!data) return null;
+
+  return {
+    observed_at: new Date(data.epoch * 1000).toISOString(),
+    temp_c: data.temp,
+    humidity: data.hum,
+    dewpoint_c: data.dew,
+    windchill_c: data.chill,
+    heat_index_c: data.heat,
+    wind_speed_kph: data.wspd,
+    wind_gust_kph: data.wspdhi,
+    wind_dir: data.wdir,
+    pressure_mb: data.bar,
+    precip_rate_mm: data.rainrate,
+    precip_total_mm: data.rain,
+    uv: data.uvi,
+    solar_radiation: data.solarrad,
+    feels_like_c: data.chill ?? data.heat ?? data.temp,
+    temp_indoor_c: data.tempin,
+    humidity_indoor: data.humin,
+  };
 }

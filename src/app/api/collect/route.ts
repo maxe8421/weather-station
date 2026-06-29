@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { fetchCurrentObservation, observationToRow } from "@/lib/wunderground";
-import { fetchWeathercloudIndoor } from "@/lib/weathercloud";
+import { fetchWeathercloudIndoor, fetchWeathercloudStation } from "@/lib/weathercloud";
 
 export async function GET(request: NextRequest) {
   const secret = request.nextUrl.searchParams.get("secret");
@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   const supabase = getSupabaseAdmin();
   const { data: stations, error: stationsError } = await supabase
     .from("stations")
-    .select("id, wunderground_id, is_primary");
+    .select("id, wunderground_id, source, source_id, is_primary");
 
   if (stationsError || !stations) {
     return NextResponse.json({ error: "Failed to fetch stations", detail: stationsError?.message }, { status: 500 });
@@ -22,17 +22,27 @@ export async function GET(request: NextRequest) {
   const results = [];
 
   for (const station of stations) {
-    const obs = await fetchCurrentObservation(station.wunderground_id);
-    if (!obs) {
-      results.push({ station: station.wunderground_id, status: "no_data" });
-      continue;
+    let row: Record<string, unknown> | null = null;
+
+    if (station.source === "weathercloud" && station.source_id) {
+      const wcData = await fetchWeathercloudStation(station.source_id);
+      if (wcData) {
+        row = { station_id: station.id, ...wcData };
+      }
+    } else {
+      const obs = await fetchCurrentObservation(station.wunderground_id);
+      if (obs) {
+        row = observationToRow(obs, station.id);
+        if (station.is_primary && indoor) {
+          row.temp_indoor_c = indoor.tempin;
+          row.humidity_indoor = indoor.humin;
+        }
+      }
     }
 
-    const row: Record<string, unknown> = observationToRow(obs, station.id);
-
-    if (station.is_primary && indoor) {
-      row.temp_indoor_c = indoor.tempin;
-      row.humidity_indoor = indoor.humin;
+    if (!row) {
+      results.push({ station: station.wunderground_id || station.source_id, status: "no_data" });
+      continue;
     }
 
     const { error } = await supabase
@@ -40,10 +50,9 @@ export async function GET(request: NextRequest) {
       .upsert(row, { onConflict: "station_id,observed_at" });
 
     results.push({
-      station: station.wunderground_id,
+      station: station.wunderground_id || station.source_id,
       status: error ? "error" : "ok",
       error: error?.message,
-      indoor: station.is_primary ? indoor : undefined,
     });
   }
 

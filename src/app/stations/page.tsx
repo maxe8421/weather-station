@@ -6,7 +6,8 @@ import { Station } from "@/lib/types";
 export default function StationsPage() {
   const [stations, setStations] = useState<Station[]>([]);
   const [name, setName] = useState("");
-  const [wuId, setWuId] = useState("");
+  const [stationId, setStationId] = useState("");
+  const [source, setSource] = useState<"wunderground" | "weathercloud">("wunderground");
   const [error, setError] = useState("");
   const [adding, setAdding] = useState(false);
   const [password, setPassword] = useState("");
@@ -33,7 +34,7 @@ export default function StationsPage() {
     const res = await fetch("/api/stations", {
       method: "POST",
       headers: authHeaders,
-      body: JSON.stringify({ name, wunderground_id: wuId }),
+      body: JSON.stringify({ name, source, station_id: stationId }),
     });
 
     if (!res.ok) {
@@ -41,7 +42,7 @@ export default function StationsPage() {
       setError(data.error || "Failed to add station");
     } else {
       setName("");
-      setWuId("");
+      setStationId("");
       fetchStations();
     }
     setAdding(false);
@@ -106,30 +107,42 @@ export default function StationsPage() {
 
         <form onSubmit={addStation} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 mb-6">
           <h2 className="font-medium mb-3">Add Station</h2>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <input
-              type="text"
-              placeholder="Station name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              className="flex-1 px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm"
-            />
-            <input
-              type="text"
-              placeholder="Wunderground ID (e.g. KLAX123)"
-              value={wuId}
-              onChange={(e) => setWuId(e.target.value)}
-              required
-              className="flex-1 px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm"
-            />
-            <button
-              type="submit"
-              disabled={adding}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-            >
-              {adding ? "Adding..." : "Add"}
-            </button>
+          <div className="flex flex-col gap-3">
+            <div className="flex gap-3">
+              <select
+                value={source}
+                onChange={(e) => setSource(e.target.value as "wunderground" | "weathercloud")}
+                className="px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm"
+              >
+                <option value="wunderground">Weather Underground</option>
+                <option value="weathercloud">Weathercloud</option>
+              </select>
+              <input
+                type="text"
+                placeholder="Station name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                className="flex-1 px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm"
+              />
+            </div>
+            <div className="flex gap-3">
+              <input
+                type="text"
+                placeholder={source === "wunderground" ? "Wunderground ID (e.g. KLAX123)" : "Weathercloud device ID (e.g. 3326837048)"}
+                value={stationId}
+                onChange={(e) => setStationId(e.target.value)}
+                required
+                className="flex-1 px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm"
+              />
+              <button
+                type="submit"
+                disabled={adding}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              >
+                {adding ? "Adding..." : "Add"}
+              </button>
+            </div>
           </div>
           {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
         </form>
@@ -145,7 +158,9 @@ export default function StationsPage() {
                   {s.name}
                   {s.is_primary && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Primary</span>}
                 </div>
-                <div className="text-sm text-gray-500">{s.wunderground_id}</div>
+                <div className="text-sm text-gray-500">
+                  {s.source === "weathercloud" ? `Weathercloud: ${s.source_id}` : s.wunderground_id}
+                </div>
                 {s.latitude && s.longitude && (
                   <div className="text-xs text-gray-400">{s.latitude.toFixed(4)}, {s.longitude.toFixed(4)}</div>
                 )}
