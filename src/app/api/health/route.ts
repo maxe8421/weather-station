@@ -6,7 +6,7 @@ export async function GET() {
 
   const { data: stations, error: stationsError } = await supabase
     .from("stations")
-    .select("id, name, wunderground_id");
+    .select("id, name, wunderground_id, source");
 
   if (stationsError || !stations || stations.length === 0) {
     return NextResponse.json(
@@ -15,19 +15,22 @@ export async function GET() {
     );
   }
 
-  const thirtyMinsAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
   const issues: string[] = [];
 
   for (const station of stations) {
+    const isWeathercloud = station.source === "weathercloud";
+    const staleMins = isWeathercloud ? 120 : 30;
+    const cutoff = new Date(Date.now() - staleMins * 60 * 1000).toISOString();
+
     const { data: readings } = await supabase
       .from("weather_readings")
       .select("observed_at")
       .eq("station_id", station.id)
-      .gte("observed_at", thirtyMinsAgo)
+      .gte("observed_at", cutoff)
       .limit(1);
 
     if (!readings || readings.length === 0) {
-      issues.push(`${station.name} (${station.wunderground_id}): no data in last 30 minutes`);
+      issues.push(`${station.name} (${station.wunderground_id}): no data in last ${staleMins} minutes`);
     }
   }
 
