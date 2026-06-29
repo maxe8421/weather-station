@@ -1,11 +1,11 @@
 "use client";
 
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend, ScatterChart, Scatter, ZAxis,
 } from "recharts";
-import { WeatherReading, TimeRange } from "@/lib/types";
-import { formatTime, aggregateDaily, aggregateReadings, windDirToCompass } from "@/lib/utils";
+import { WeatherReading, DailyReading, TimeRange } from "@/lib/types";
+import { formatTime, formatDay, aggregateDaily, aggregateReadings, windDirToCompass } from "@/lib/utils";
 
 const COLORS = {
   red: "#dc2626",
@@ -24,238 +24,259 @@ const TOOLTIP_STYLE = { borderRadius: "8px", border: "1px solid #e5e7eb" };
 const GRID_COLOR = "#d1d5db";
 const TICK_STYLE = { fill: "#6b7280" };
 
-interface ChartConfig {
-  title: string;
-  fields: { key: keyof WeatherReading; label: string; color: string }[];
-  unit: string;
-  dailyAggregate?: boolean;
-  aggregateField?: keyof WeatherReading;
+type Mode = "raw" | "daily";
+type Row = Record<string, number | string | null>;
+interface FieldDef { key: keyof WeatherReading | keyof DailyReading; label: string; color: string }
+
+interface ChartsProps {
+  mode: Mode;
+  readings: WeatherReading[];
+  daily: DailyReading[];
+  range: TimeRange;
 }
 
-const CHART_CONFIGS: ChartConfig[] = [
-  {
-    title: "Temperature",
-    fields: [
-      { key: "temp_c", label: "Outdoor", color: COLORS.red },
-      { key: "temp_indoor_c", label: "Indoor", color: COLORS.orange },
-      { key: "dewpoint_c", label: "Dew Point", color: COLORS.blue },
-    ],
-    unit: "°C",
-    dailyAggregate: true,
-    aggregateField: "temp_c",
-  },
-  {
-    title: "Humidity",
-    fields: [{ key: "humidity", label: "Humidity", color: COLORS.cyan }],
-    unit: "%",
-  },
-  {
-    title: "Pressure",
-    fields: [{ key: "pressure_mb", label: "Pressure", color: COLORS.purple }],
-    unit: "hPa",
-  },
-  {
-    title: "Wind Speed",
-    fields: [
-      { key: "wind_speed_kph", label: "Speed", color: COLORS.green },
-      { key: "wind_gust_kph", label: "Gust", color: COLORS.amber },
-    ],
-    unit: "km/h",
-  },
-  {
-    title: "Rainfall",
-    fields: [
-      { key: "precip_rate_mm", label: "Rate (mm/hr)", color: COLORS.sky },
-      { key: "precip_total_mm", label: "Total (mm)", color: COLORS.indigo },
-    ],
-    unit: "mm",
-  },
-];
+function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+      <h3 className="font-medium mb-3">{title}</h3>
+      {children}
+    </div>
+  );
+}
 
-function SingleChart({ config, readings, range }: { config: ChartConfig; readings: WeatherReading[]; range: TimeRange }) {
-  const showDailyAgg = config.dailyAggregate && (range === "30d" || range === "1y" || range === "all");
+function NoData({ title }: { title: string }) {
+  return (
+    <Panel title={title}>
+      <div className="h-[250px] flex items-center justify-center text-sm text-gray-400">
+        No data for this metric
+      </div>
+    </Panel>
+  );
+}
 
-  if (showDailyAgg && config.aggregateField) {
-    const daily = aggregateDaily(readings, config.aggregateField);
+function rowsHaveData(rows: Row[], labels: string[]): boolean {
+  return rows.some((r) => labels.some((l) => r[l] !== null && r[l] !== undefined));
+}
+
+export default function WeatherCharts({ mode, readings, daily, range }: ChartsProps) {
+  const isDaily = mode === "daily";
+  const hasAny = isDaily ? daily.length > 0 : readings.length > 0;
+  if (!hasAny) {
+    return <div className="text-gray-500 text-center py-8">No data for this time range</div>;
+  }
+
+  const tempSummaryMode = range === "30d" || range === "1y" || range === "all";
+
+  // Build a {label, <seriesLabel>: value} dataset for a set of fields,
+  // transparently handling raw (24h), client-aggregated (7d/30d) and
+  // server-aggregated daily (1y/all) inputs.
+  function buildRows(fields: FieldDef[]): Row[] {
+    const read = (obj: unknown, key: string): number | string | null =>
+      (obj as Record<string, number | string | null>)[key] ?? null;
+
+    if (isDaily) {
+      return daily.map((r) => {
+        const o: Row = { label: formatDay(r.day, range) };
+        for (const f of fields) o[f.label] = read(r, f.key);
+        return o;
+      });
+    }
+    if (range === "24h") {
+      return readings.map((r) => {
+        const o: Row = { label: formatTime(r.observed_at, range) };
+        for (const f of fields) o[f.label] = read(r, f.key);
+        return o;
+      });
+    }
+    const agg = aggregateReadings(readings, fields.map((f) => f.key as keyof WeatherReading), range);
+    return agg.map((p) => {
+      const o: Row = { label: p.label };
+      for (const f of fields) o[f.label] = read(p, f.key);
+      return o;
+    });
+  }
+
+  function LineCard({ title, fields, unit }: { title: string; fields: FieldDef[]; unit?: string }) {
+    const rows = buildRows(fields);
+    const labels = fields.map((f) => f.label);
+    if (!rowsHaveData(rows, labels)) return <NoData title={title} />;
     return (
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-        <h3 className="font-medium mb-3">{config.title} (Daily Summary)</h3>
+      <Panel title={title}>
         <ResponsiveContainer width="100%" height={250}>
-          <LineChart data={daily}>
+          <LineChart data={rows}>
             <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
-            <XAxis dataKey="date" fontSize={12} tick={TICK_STYLE} />
-            <YAxis fontSize={12} tick={TICK_STYLE} />
+            <XAxis dataKey="label" fontSize={12} tick={TICK_STYLE} />
+            <YAxis fontSize={12} tick={TICK_STYLE} unit={unit ? ` ${unit}` : undefined} />
             <Tooltip contentStyle={TOOLTIP_STYLE} />
             <Legend />
-            <Line type="monotone" dataKey="max" name="Max" stroke={COLORS.red} dot={false} strokeWidth={1.5} />
-            <Line type="monotone" dataKey="avg" name="Avg" stroke={COLORS.orange} dot={false} strokeWidth={2} />
-            <Line type="monotone" dataKey="min" name="Min" stroke={COLORS.blue} dot={false} strokeWidth={1.5} />
+            {fields.map((f) => (
+              <Line key={f.label} type="monotone" dataKey={f.label} stroke={f.color} dot={false} strokeWidth={2} connectNulls />
+            ))}
           </LineChart>
         </ResponsiveContainer>
-      </div>
+      </Panel>
     );
   }
 
-  const fieldKeys = config.fields.map((f) => f.key);
-  const aggregated = aggregateReadings(readings, fieldKeys, range);
-  const chartData = aggregated.map((p) => {
-    const point: Record<string, unknown> = { time: p.label };
-    for (const f of config.fields) {
-      point[f.label] = p[f.key as string];
+  function TemperatureCard() {
+    const title = tempSummaryMode ? "Temperature (Daily Summary)" : "Temperature";
+    if (tempSummaryMode) {
+      const summary = isDaily
+        ? daily.map((r) => ({ label: formatDay(r.day, range), min: r.temp_min, avg: r.temp_avg, max: r.temp_max }))
+        : aggregateDaily(readings, "temp_c").map((s) => ({ label: s.date, min: s.min, avg: s.avg, max: s.max }));
+      if (!rowsHaveData(summary as Row[], ["min", "avg", "max"])) return <NoData title={title} />;
+      return (
+        <Panel title={title}>
+          <ResponsiveContainer width="100%" height={250}>
+            <LineChart data={summary}>
+              <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
+              <XAxis dataKey="label" fontSize={12} tick={TICK_STYLE} />
+              <YAxis fontSize={12} tick={TICK_STYLE} unit=" °C" />
+              <Tooltip contentStyle={TOOLTIP_STYLE} />
+              <Legend />
+              <Line type="monotone" dataKey="max" name="Max" stroke={COLORS.red} dot={false} strokeWidth={1.5} connectNulls />
+              <Line type="monotone" dataKey="avg" name="Avg" stroke={COLORS.orange} dot={false} strokeWidth={2} connectNulls />
+              <Line type="monotone" dataKey="min" name="Min" stroke={COLORS.blue} dot={false} strokeWidth={1.5} connectNulls />
+            </LineChart>
+          </ResponsiveContainer>
+        </Panel>
+      );
     }
-    return point;
-  });
-
-  return (
-    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-      <h3 className="font-medium mb-3">{config.title}</h3>
-      <ResponsiveContainer width="100%" height={250}>
-        <LineChart data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
-          <XAxis dataKey="time" fontSize={12} tick={TICK_STYLE} />
-          <YAxis fontSize={12} tick={TICK_STYLE} unit={config.unit ? ` ${config.unit}` : undefined} />
-          <Tooltip contentStyle={TOOLTIP_STYLE} />
-          <Legend />
-          {config.fields.map((f) => (
-            <Line key={f.key} type="monotone" dataKey={f.label} stroke={f.color} dot={false} strokeWidth={2} connectNulls />
-          ))}
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-function WindDirectionChart({ readings, range }: { readings: WeatherReading[]; range: TimeRange }) {
-  if (range === "24h") {
-    const data = readings
-      .filter((r) => r.wind_dir !== null)
-      .map((r) => ({
-        time: formatTime(r.observed_at, range),
-        direction: r.wind_dir,
-        speed: r.wind_speed_kph ?? 0,
-      }));
-
-    if (data.length === 0) return null;
-
     return (
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-        <h3 className="font-medium mb-3">Wind Direction</h3>
+      <LineCard
+        title={title}
+        unit="°C"
+        fields={[
+          { key: "temp_c", label: "Outdoor", color: COLORS.red },
+          { key: "temp_indoor_c", label: "Indoor", color: COLORS.orange },
+          { key: "dewpoint_c", label: "Dew Point", color: COLORS.blue },
+        ]}
+      />
+    );
+  }
+
+  function WindDirectionCard() {
+    const title = range === "24h" ? "Wind Direction" : "Wind Direction (Average)";
+
+    if (range === "24h" && !isDaily) {
+      const points = readings
+        .filter((r) => r.wind_dir !== null)
+        .map((r) => ({
+          label: formatTime(r.observed_at, range),
+          direction: r.wind_dir,
+          speed: r.wind_speed_kph ?? 0,
+        }));
+      if (points.length === 0) return <NoData title={title} />;
+      return (
+        <Panel title={title}>
+          <ResponsiveContainer width="100%" height={250}>
+            <ScatterChart>
+              <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
+              <XAxis dataKey="label" fontSize={12} tick={TICK_STYLE} />
+              <YAxis dataKey="direction" fontSize={12} tick={TICK_STYLE} domain={[0, 360]}
+                ticks={[0, 90, 180, 270, 360]} tickFormatter={(v: number) => ["N", "E", "S", "W", "N"][v / 90]} />
+              <ZAxis dataKey="speed" range={[20, 200]} name="Speed (km/h)" />
+              <Tooltip
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                formatter={(value: any, name: any) =>
+                  name === "direction" ? [`${value}° ${windDirToCompass(Number(value))}`, "Direction"] : [value, name]
+                }
+                contentStyle={TOOLTIP_STYLE}
+              />
+              <Scatter data={points} fill={COLORS.green} opacity={0.7} />
+            </ScatterChart>
+          </ResponsiveContainer>
+          <div className="text-xs text-gray-400 mt-1 text-center">Dot size = wind speed</div>
+        </Panel>
+      );
+    }
+
+    const rows = buildRows([{ key: "wind_dir", label: "Direction", color: COLORS.green }]);
+    if (!rowsHaveData(rows, ["Direction"])) return <NoData title={title} />;
+    return (
+      <Panel title={title}>
         <ResponsiveContainer width="100%" height={250}>
-          <ScatterChart>
+          <LineChart data={rows}>
             <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
-            <XAxis dataKey="time" fontSize={12} tick={TICK_STYLE} name="Time" />
-            <YAxis
-              dataKey="direction"
-              fontSize={12}
-              tick={TICK_STYLE}
-              domain={[0, 360]}
-              ticks={[0, 90, 180, 270, 360]}
-              tickFormatter={(v: number) => ["N", "E", "S", "W", "N"][v / 90]}
-            />
-            <ZAxis dataKey="speed" range={[20, 200]} name="Speed (km/h)" />
+            <XAxis dataKey="label" fontSize={12} tick={TICK_STYLE} />
+            <YAxis fontSize={12} tick={TICK_STYLE} domain={[0, 360]} ticks={[0, 90, 180, 270, 360]}
+              tickFormatter={(v: number) => ["N", "E", "S", "W", "N"][v / 90]} />
             <Tooltip
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              formatter={(value: any, name: any) => {
-                if (name === "Direction") return [`${value}° ${windDirToCompass(Number(value))}`, name];
-                return [value, name];
-              }}
+              formatter={(value: any) => [`${value}° ${windDirToCompass(Number(value))}`, "Direction"]}
               contentStyle={TOOLTIP_STYLE}
             />
-            <Scatter data={data} fill={COLORS.green} opacity={0.7} />
-          </ScatterChart>
+            <Line type="stepAfter" dataKey="Direction" stroke={COLORS.green} dot={false} strokeWidth={2} connectNulls />
+          </LineChart>
         </ResponsiveContainer>
-        <div className="text-xs text-gray-400 mt-1 text-center">Dot size = wind speed</div>
-      </div>
+      </Panel>
     );
   }
 
-  const aggregated = aggregateReadings(readings, ["wind_dir"], range);
-  const data = aggregated
-    .filter((p) => p.wind_dir !== null)
-    .map((p) => ({
-      time: p.label,
-      direction: p.wind_dir as number,
-      compass: windDirToCompass(p.wind_dir as number),
-    }));
+  function RainfallCard() {
+    const fields: FieldDef[] = [
+      { key: "precip_rate_mm", label: "Rate (mm/hr)", color: COLORS.sky },
+      { key: "precip_total_mm", label: "Total (mm)", color: COLORS.indigo },
+    ];
+    const rows = buildRows(fields);
+    const labels = fields.map((f) => f.label);
+    if (!rowsHaveData(rows, labels)) return <NoData title="Rainfall" />;
+    return (
+      <Panel title="Rainfall">
+        <ResponsiveContainer width="100%" height={250}>
+          <BarChart data={rows}>
+            <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} vertical={false} />
+            <XAxis dataKey="label" fontSize={12} tick={TICK_STYLE} />
+            <YAxis fontSize={12} tick={TICK_STYLE} unit=" mm" />
+            <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: "rgba(0,0,0,0.04)" }} />
+            <Legend />
+            {fields.map((f) => (
+              <Bar key={f.label} dataKey={f.label} fill={f.color} radius={[2, 2, 0, 0]} />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      </Panel>
+    );
+  }
 
-  if (data.length === 0) return null;
-
-  return (
-    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-      <h3 className="font-medium mb-3">Wind Direction (Average)</h3>
-      <ResponsiveContainer width="100%" height={250}>
-        <LineChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
-          <XAxis dataKey="time" fontSize={12} tick={TICK_STYLE} />
-          <YAxis
-            fontSize={12}
-            tick={TICK_STYLE}
-            domain={[0, 360]}
-            ticks={[0, 90, 180, 270, 360]}
-            tickFormatter={(v: number) => ["N", "E", "S", "W", "N"][v / 90]}
-          />
-          <Tooltip
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            formatter={(value: any) => [`${value}° ${windDirToCompass(Number(value))}`, "Direction"]}
-            contentStyle={TOOLTIP_STYLE}
-          />
-          <Line type="stepAfter" dataKey="direction" stroke={COLORS.green} dot={false} strokeWidth={2} />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-function UVChart({ readings, range }: { readings: WeatherReading[]; range: TimeRange }) {
-  const aggregated = aggregateReadings(readings, ["uv", "solar_radiation"], range);
-  const chartData = aggregated.map((p) => ({
-    time: p.label,
-    "UV Index": p.uv,
-    "Solar Radiation": p.solar_radiation,
-  }));
-
-  return (
-    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-      <h3 className="font-medium mb-3">UV & Solar Radiation</h3>
-      <ResponsiveContainer width="100%" height={250}>
-        <LineChart data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
-          <XAxis dataKey="time" fontSize={12} tick={TICK_STYLE} />
-          <YAxis
-            yAxisId="uv"
-            fontSize={12}
-            tick={{ fill: COLORS.amber }}
-            label={{ value: "UV Index", angle: -90, position: "insideLeft", style: { fill: COLORS.amber, fontSize: 11 } }}
-          />
-          <YAxis
-            yAxisId="solar"
-            orientation="right"
-            fontSize={12}
-            tick={{ fill: COLORS.pink }}
-            label={{ value: "W/m²", angle: 90, position: "insideRight", style: { fill: COLORS.pink, fontSize: 11 } }}
-          />
-          <Tooltip contentStyle={TOOLTIP_STYLE} />
-          <Legend />
-          <Line yAxisId="uv" type="monotone" dataKey="UV Index" stroke={COLORS.amber} dot={false} strokeWidth={2} />
-          <Line yAxisId="solar" type="monotone" dataKey="Solar Radiation" stroke={COLORS.pink} dot={false} strokeWidth={2} />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-export default function WeatherCharts({ readings, range }: { readings: WeatherReading[]; range: TimeRange }) {
-  if (readings.length === 0) {
-    return <div className="text-gray-500 text-center py-8">No data for this time range</div>;
+  function UVCard() {
+    const rows = buildRows([
+      { key: "uv", label: "UV Index", color: COLORS.amber },
+      { key: "solar_radiation", label: "Solar Radiation", color: COLORS.pink },
+    ]);
+    if (!rowsHaveData(rows, ["UV Index", "Solar Radiation"])) return <NoData title="UV & Solar Radiation" />;
+    return (
+      <Panel title="UV & Solar Radiation">
+        <ResponsiveContainer width="100%" height={250}>
+          <LineChart data={rows}>
+            <CartesianGrid strokeDasharray="3 3" stroke={GRID_COLOR} />
+            <XAxis dataKey="label" fontSize={12} tick={TICK_STYLE} />
+            <YAxis yAxisId="uv" fontSize={12} tick={{ fill: COLORS.amber }}
+              label={{ value: "UV Index", angle: -90, position: "insideLeft", style: { fill: COLORS.amber, fontSize: 11 } }} />
+            <YAxis yAxisId="solar" orientation="right" fontSize={12} tick={{ fill: COLORS.pink }}
+              label={{ value: "W/m²", angle: 90, position: "insideRight", style: { fill: COLORS.pink, fontSize: 11 } }} />
+            <Tooltip contentStyle={TOOLTIP_STYLE} />
+            <Legend />
+            <Line yAxisId="uv" type="monotone" dataKey="UV Index" stroke={COLORS.amber} dot={false} strokeWidth={2} connectNulls />
+            <Line yAxisId="solar" type="monotone" dataKey="Solar Radiation" stroke={COLORS.pink} dot={false} strokeWidth={2} connectNulls />
+          </LineChart>
+        </ResponsiveContainer>
+      </Panel>
+    );
   }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      {CHART_CONFIGS.map((config) => (
-        <SingleChart key={config.title} config={config} readings={readings} range={range} />
-      ))}
-      <WindDirectionChart readings={readings} range={range} />
-      <UVChart readings={readings} range={range} />
+      <TemperatureCard />
+      <LineCard title="Humidity" unit="%" fields={[{ key: "humidity", label: "Humidity", color: COLORS.cyan }]} />
+      <LineCard title="Pressure" unit="hPa" fields={[{ key: "pressure_mb", label: "Pressure", color: COLORS.purple }]} />
+      <LineCard title="Wind Speed" unit="km/h" fields={[
+        { key: "wind_speed_kph", label: "Speed", color: COLORS.green },
+        { key: "wind_gust_kph", label: "Gust", color: COLORS.amber },
+      ]} />
+      <RainfallCard />
+      <WindDirectionCard />
+      <UVCard />
     </div>
   );
 }

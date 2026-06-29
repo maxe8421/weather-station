@@ -23,9 +23,12 @@ export default function Home() {
       fetch("/api/latest")
         .then((r) => r.json())
         .then((data) => {
-          setStations(data);
-          setLoading(false);
-        });
+          // Guard against error-shaped responses ({error: ...}) so a transient
+          // API failure renders an empty state instead of crashing on .map().
+          if (Array.isArray(data)) setStations(data);
+        })
+        .catch(() => {})
+        .finally(() => setLoading(false));
     load();
     const interval = setInterval(load, 60000);
     return () => clearInterval(interval);
@@ -111,11 +114,17 @@ export default function Home() {
                   <div className="text-sm text-gray-400">No data yet</div>
                 )}
 
-                {s.latest && (
-                  <div className="text-xs text-gray-400 mt-3">
-                    {new Date(s.latest.observed_at).toLocaleString()}
-                  </div>
-                )}
+                {s.latest && (() => {
+                  const ageMins = (Date.now() - new Date(s.latest.observed_at).getTime()) / 60000;
+                  const staleAfter = s.source === "weathercloud" ? 120 : 30;
+                  const isStale = ageMins > staleAfter;
+                  return (
+                    <div className={`text-xs mt-3 flex items-center gap-1.5 ${isStale ? "text-amber-600" : "text-gray-400"}`}>
+                      {isStale && <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500" />}
+                      {isStale ? "Stale · " : ""}{new Date(s.latest.observed_at).toLocaleString()}
+                    </div>
+                  );
+                })()}
               </a>
             ))}
           </div>

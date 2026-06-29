@@ -12,14 +12,40 @@ export default function StationsPage() {
   const [adding, setAdding] = useState(false);
   const [password, setPassword] = useState("");
   const [authenticated, setAuthenticated] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [verifying, setVerifying] = useState(false);
 
   const fetchStations = () => {
     fetch("/api/stations")
       .then((r) => r.json())
-      .then(setStations);
+      .then((data) => {
+        if (Array.isArray(data)) setStations(data);
+      })
+      .catch(() => {});
   };
 
   useEffect(fetchStations, []);
+
+  const verifyPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError("");
+    setVerifying(true);
+    try {
+      const res = await fetch("/api/admin/verify", {
+        method: "POST",
+        headers: { "x-admin-secret": password },
+      });
+      if (res.ok) {
+        setAuthenticated(true);
+      } else {
+        setAuthError("Incorrect password");
+      }
+    } catch {
+      setAuthError("Could not verify password");
+    } finally {
+      setVerifying(false);
+    }
+  };
 
   const authHeaders = {
     "Content-Type": "application/json",
@@ -64,10 +90,7 @@ export default function StationsPage() {
         <div className="max-w-sm mx-auto px-4 py-24">
           <h1 className="text-2xl font-bold mb-6 text-center">Manage Stations</h1>
           <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              setAuthenticated(true);
-            }}
+            onSubmit={verifyPassword}
             className="bg-white rounded-xl p-6 shadow-sm border border-gray-100"
           >
             <label className="block text-sm text-gray-500 mb-2">Admin password</label>
@@ -80,10 +103,12 @@ export default function StationsPage() {
             />
             <button
               type="submit"
-              className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+              disabled={verifying}
+              className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
             >
-              Continue
+              {verifying ? "Checking..." : "Continue"}
             </button>
+            {authError && <p className="text-red-500 text-sm mt-3 text-center">{authError}</p>}
           </form>
           <div className="text-center mt-4">
             <a href="/" className="text-sm text-blue-600 hover:text-blue-800">

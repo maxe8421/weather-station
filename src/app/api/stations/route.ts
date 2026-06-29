@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin, getSupabasePublic } from "@/lib/supabase";
 import { fetchCurrentObservation } from "@/lib/wunderground";
+import { isAuthorised, isValidUuid } from "@/lib/auth";
 
 export async function GET() {
   const { data, error } = await getSupabasePublic()
@@ -12,93 +13,101 @@ export async function GET() {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-
   return NextResponse.json(data);
 }
 
-function checkAuth(request: NextRequest): boolean {
-  return request.headers.get("x-admin-secret") === process.env.CRON_SECRET;
-}
-
 export async function POST(request: NextRequest) {
-  if (!checkAuth(request)) {
+  if (!isAuthorised(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = await request.json();
-  const { name, source, station_id } = body;
+  let body: { name?: string; source?: string; station_id?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
 
-  if (!name || !station_id) {
+  const name = body.name?.trim();
+  const rawId = body.station_id?.trim();
+  const source = body.source === "weathercloud" ? "weathercloud" : "wunderground";
+
+  if (!name || !rawId) {
     return NextResponse.json(
       { error: "name and station_id are required" },
       { status: 400 }
     );
   }
 
-  const stationSource = source || "wunderground";
+  const admin = getSupabaseAdmin();
 
-  if (stationSource === "wunderground") {
-    const obs = await fetchCurrentObservation(station_id);
+  if (source === "wunderground") {
+    const wuId = rawId.toUpperCase();
+    const obs = await fetchCurrentObservation(wuId);
     if (!obs) {
       return NextResponse.json(
         { error: "Station not found on Weather Underground" },
         { status: 404 }
       );
     }
-
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await admin
       .from("stations")
       .insert({
         name,
-        wunderground_id: station_id.toUpperCase(),
+        wunderground_id: wuId,
         source: "wunderground",
-        source_id: station_id.toUpperCase(),
+        source_id: wuId,
         latitude: obs.lat,
         longitude: obs.lon,
       })
       .select()
       .single();
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json(data, { status: 201 });
   }
 
-  // Weathercloud station
-  const { data, error } = await getSupabaseAdmin()
+  // Weathercloud: 4-letter codes are airport METAR stations (store upper-cased
+  // so the source endpoint is selected deterministically); numeric IDs are
+  // device IDs and are stored verbatim.
+  const isMetar = /^[a-z]{4}$/i.test(rawId);
+  const sourceId = isMetar ? rawId.toUpperCase() : rawId;
+
+  const { data, error } = await admin
     .from("stations")
     .insert({
       name,
-      wunderground_id: `WC-${station_id}`,
+      wunderground_id: `WC-${sourceId}`,
       source: "weathercloud",
-      source_id: station_id,
+      source_id: sourceId,
     })
     .select()
     .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data, { status: 201 });
 }
 
 export async function DELETE(request: NextRequest) {
-  if (!checkAuth(request)) {
+  if (!isAuthorised(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id } = await request.json();
+  let body: { id?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  if (!isValidUuid(body.id)) {
+    return NextResponse.json({ error: "A valid station id is required" }, { status: 400 });
+  }
 
   const { error } = await getSupabaseAdmin()
     .from("stations")
     .delete()
-    .eq("id", id)
-    .eq("is_primary", false);
+    .eq("id", body.id)
+    .eq("is_primary", false); // never delete the primary station
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

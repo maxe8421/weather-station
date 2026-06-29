@@ -34,3 +34,29 @@ export interface WeatherReading {
 }
 
 export type TimeRange = "24h" | "7d" | "30d" | "1y" | "all";
+
+/** One day's aggregated metrics, produced by the readings_daily SQL function. */
+export interface DailyReading {
+  day: string; // ISO date, e.g. "2026-06-29"
+  temp_avg: number | null;
+  temp_min: number | null;
+  temp_max: number | null;
+  temp_indoor_c: number | null;
+  feels_like_c: number | null;
+  dewpoint_c: number | null;
+  humidity: number | null;
+  pressure_mb: number | null;
+  wind_speed_kph: number | null;
+  wind_gust_kph: number | null;
+  wind_dir: number | null;
+  precip_total_mm: number | null;
+  precip_rate_mm: number | null;
+  uv: number | null;
+  solar_radiation: number | null;
+}
+
+export interface ReadingsResponse {
+  mode: "raw" | "daily";
+  data: WeatherReading[] | DailyReading[];
+  latest: WeatherReading | null;
+}

@@ -1,11 +1,12 @@
+import { fetchWithTimeout } from "./http";
+import { ReadingColumn } from "./reading";
+
 const API_KEY = process.env.WUNDERGROUND_API_KEY!;
 const BASE_URL = "https://api.weather.com/v2/pws/observations/current";
 
 export interface WUObservation {
   stationID: string;
   obsTimeUtc: string;
-  obsTimeLocal: string;
-  epoch: number;
   lat: number;
   lon: number;
   solarRadiation: number | null;
@@ -29,26 +30,30 @@ export interface WUObservation {
 export async function fetchCurrentObservation(
   stationId: string
 ): Promise<WUObservation | null> {
-  const url = `${BASE_URL}?stationId=${stationId}&format=json&units=m&numericPrecision=decimal&apiKey=${API_KEY}`;
-  const res = await fetch(url, { cache: "no-store" });
+  const url = `${BASE_URL}?stationId=${encodeURIComponent(
+    stationId
+  )}&format=json&units=m&numericPrecision=decimal&apiKey=${API_KEY}`;
 
-  if (!res.ok) {
-    const body = await res.text();
-    console.error(`WU API error for ${stationId}: ${res.status}`, body);
+  try {
+    const res = await fetchWithTimeout(url, { cache: "no-store" });
+    if (!res.ok) {
+      console.error(`WU API error for ${stationId}: ${res.status}`);
+      return null;
+    }
+    const data = await res.json();
+    return data.observations?.[0] ?? null;
+  } catch (err) {
+    console.error(`WU fetch failed for ${stationId}:`, err);
     return null;
   }
-
-  const data = await res.json();
-  return data.observations?.[0] ?? null;
 }
 
+/** Map a WU observation to a partial canonical reading row (no station_id). */
 export function observationToRow(
-  obs: WUObservation,
-  stationId: string
-) {
+  obs: WUObservation
+): Partial<Record<ReadingColumn, unknown>> {
   const m = obs.metric;
   return {
-    station_id: stationId,
     observed_at: obs.obsTimeUtc,
     temp_c: m.temp,
     humidity: obs.humidity,

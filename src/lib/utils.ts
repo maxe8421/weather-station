@@ -38,7 +38,20 @@ function groupKey(iso: string, range: TimeRange): string {
     return d.toLocaleDateString([], { weekday: "short" }) + " " +
       d.toLocaleTimeString([], { hour: "2-digit" });
   }
+  // Client-side daily bucketing is only used for the 30-day range, where two
+  // calendar days can never share a "month day" label, so a concise label is
+  // safe. Multi-year ranges (1y / all) are aggregated in SQL with full dates.
   return d.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+/** Format an ISO date (from the daily SQL aggregate) for an axis label. */
+export function formatDay(isoDate: string, range: TimeRange): string {
+  const d = new Date(isoDate);
+  const opts: Intl.DateTimeFormatOptions =
+    range === "all"
+      ? { year: "2-digit", month: "short", day: "numeric" }
+      : { month: "short", day: "numeric" };
+  return d.toLocaleDateString([], opts);
 }
 
 function avgValues(values: number[]): number {

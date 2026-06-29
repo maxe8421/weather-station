@@ -1,7 +1,13 @@
+-- =============================================================
+-- Full schema for a fresh install. Run top-to-bottom in the
+-- Supabase SQL Editor. (For an existing database, see the
+-- "MIGRATION" block at the bottom for the incremental changes.)
+-- =============================================================
+
 create table stations (
   id uuid primary key default gen_random_uuid(),
   name text not null,
-  wunderground_id text not null unique,
+  wunderground_id text,
   latitude double precision,
   longitude double precision,
   is_primary boolean default false,
@@ -29,13 +35,15 @@ create table weather_readings (
   solar_radiation double precision,
   feels_like_c double precision,
   elevation double precision,
+  temp_indoor_c double precision,
+  humidity_indoor integer,
   unique(station_id, observed_at)
 );
 
 create index idx_readings_station_time on weather_readings(station_id, observed_at desc);
 create index idx_readings_observed_at on weather_readings(observed_at desc);
 
--- RLS policies
+-- Row-level security: public read, writes only via the service-role key.
 alter table stations enable row level security;
 alter table weather_readings enable row level security;
 
@@ -47,6 +55,71 @@ grant select on weather_readings to anon;
 grant all on stations to service_role;
 grant all on weather_readings to service_role;
 
--- Insert primary station
-insert into stations (name, wunderground_id, is_primary)
-values ('My Station', 'IKINGS664', true);
+-- Daily aggregation done in SQL so long ranges (1y / all) never transfer or
+-- truncate tens of thousands of raw rows. Wind direction uses a vector
+-- (circular) mean; temperature carries min/avg/max for the summary chart.
+create or replace function readings_daily(p_station_id uuid, p_from timestamptz)
+returns table (
+  day date,
+  temp_avg double precision,
+  temp_min double precision,
+  temp_max double precision,
+  temp_indoor_c double precision,
+  feels_like_c double precision,
+  dewpoint_c double precision,
+  humidity double precision,
+  pressure_mb double precision,
+  wind_speed_kph double precision,
+  wind_gust_kph double precision,
+  wind_dir double precision,
+  precip_total_mm double precision,
+  precip_rate_mm double precision,
+  uv double precision,
+  solar_radiation double precision
+)
+language sql
+stable
+as $$
+  select
+    (observed_at at time zone 'UTC')::date as day,
+    round(avg(temp_c)::numeric, 1)::float8,
+    round(min(temp_c)::numeric, 1)::float8,
+    round(max(temp_c)::numeric, 1)::float8,
+    round(avg(temp_indoor_c)::numeric, 1)::float8,
+    round(avg(feels_like_c)::numeric, 1)::float8,
+    round(avg(dewpoint_c)::numeric, 1)::float8,
+    round(avg(humidity)::numeric, 1)::float8,
+    round(avg(pressure_mb)::numeric, 1)::float8,
+    round(avg(wind_speed_kph)::numeric, 1)::float8,
+    round(max(wind_gust_kph)::numeric, 1)::float8,
+    case when count(wind_dir) = 0 then null
+      else ((degrees(atan2(avg(sind(wind_dir)), avg(cosd(wind_dir)))) + 360)::numeric % 360)::float8
+    end,
+    round(max(precip_total_mm)::numeric, 2)::float8,
+    round(max(precip_rate_mm)::numeric, 2)::float8,
+    round(avg(uv)::numeric, 1)::float8,
+    round(avg(solar_radiation)::numeric, 0)::float8
+  from weather_readings
+  where station_id = p_station_id and observed_at >= p_from
+  group by day
+  order by day;
+$$;
+
+grant execute on function readings_daily(uuid, timestamptz) to anon, service_role;
+
+-- Seed your primary station.
+insert into stations (name, wunderground_id, source, source_id, is_primary)
+values ('Kingston', 'IKINGS664', 'wunderground', 'IKINGS664', true);
+
+-- =============================================================
+-- MIGRATION (run only these on an already-deployed database that
+-- predates this revision; the statements above already include them
+-- for fresh installs):
+--
+--   alter table stations add column if not exists source text not null default 'wunderground';
+--   alter table stations add column if not exists source_id text;
+--   alter table weather_readings add column if not exists temp_indoor_c double precision;
+--   alter table weather_readings add column if not exists humidity_indoor integer;
+--   alter table stations drop constraint if exists stations_wunderground_id_key;
+--   -- then run the create-or-replace function + grant above.
+-- =============================================================
