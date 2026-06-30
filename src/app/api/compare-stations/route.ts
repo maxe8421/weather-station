@@ -26,8 +26,8 @@ export async function GET(request: NextRequest) {
   const rangeParam = p.get("range") || "30d";
   const range = (VALID_RANGES as readonly string[]).includes(rangeParam) ? rangeParam : "30d";
 
-  if (ids.length < 1 || ids.length > 8 || !ids.every(isValidUuid)) {
-    return NextResponse.json({ error: "Provide 1–8 valid station ids" }, { status: 400 });
+  if (ids.length < 1 || ids.length > 4 || !ids.every(isValidUuid)) {
+    return NextResponse.json({ error: "Provide 1–4 valid station ids" }, { status: 400 });
   }
 
   const supabase = getSupabasePublic();
