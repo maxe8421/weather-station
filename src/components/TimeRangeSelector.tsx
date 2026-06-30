@@ -3,7 +3,7 @@
 import { TimeRange } from "@/lib/types";
 
 const RANGES: { value: TimeRange; label: string }[] = [
-  { value: "24h", label: "24 Hours" },
+  { value: "today", label: "Today" },
   { value: "7d", label: "7 Days" },
   { value: "30d", label: "30 Days" },
   { value: "1y", label: "1 Year" },

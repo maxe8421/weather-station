@@ -35,7 +35,7 @@ export interface WeatherReading {
   humidity_indoor: number | null;
 }
 
-export type TimeRange = "24h" | "7d" | "30d" | "1y" | "all";
+export type TimeRange = "today" | "7d" | "30d" | "1y" | "all";
 
 /** One day's aggregated metrics, produced by the readings_daily SQL function. */
 export interface DailyReading {

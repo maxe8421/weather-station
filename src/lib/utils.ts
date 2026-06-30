@@ -21,7 +21,7 @@ function averageWindDir(degrees: number[]): number {
 }
 
 export function formatTime(iso: string, range: string, tz?: string | null): string {
-  if (range === "24h") return zTime(iso, tz, { hour: "2-digit", minute: "2-digit" });
+  if (range === "today") return zTime(iso, tz, { hour: "2-digit", minute: "2-digit" });
   if (range === "7d") return zDate(iso, tz, { weekday: "short", hour: "2-digit" });
   return zDate(iso, tz, { month: "short", day: "numeric" });
 }
@@ -88,7 +88,7 @@ const zStr = (iso: string, tz: string | null | undefined, opts: Intl.DateTimeFor
   new Date(iso).toLocaleString([], tz ? { ...opts, timeZone: tz } : opts);
 
 /**
- * Hourly vector-mean wind direction for the 24h view. Buckets raw points into
+ * Hourly vector-mean wind direction for the Today view. Buckets raw points into
  * clock hours and averages each bucket circularly, so the chart reads as one
  * clean point per hour instead of ~144 scattered raw observations.
  */
@@ -174,7 +174,7 @@ interface SunshinePoint {
 
 /**
  * Bright-sunshine hours bucketed to match the other charts: one point per raw
- * reading on 24h, 6-hour buckets on 7d. Each value is the hours of sunshine
+ * reading on Today, 6-hour buckets on 7d. Each value is the hours of sunshine
  * accumulated within that bucket (each reading contributes the sunlit portion
  * of the interval that follows it). Daily ranges use the rollup instead.
  */
@@ -196,12 +196,12 @@ export function sunshineSeries(readings: WeatherReading[], range: TimeRange, tz?
         : 0,
   }));
 
-  if (range === "24h") {
+  if (range === "today") {
     return contribs.map((c) => {
       const iso = new Date(c.t).toISOString();
       const z = zonedParts(iso, tz);
       return {
-        label: formatTime(iso, "24h", tz),
+        label: formatTime(iso, "today", tz),
         dayLabel: null,
         fullLabel: zStr(iso, tz, { weekday: "short", hour: "2-digit", minute: "2-digit" }),
         day: zDayStr(z),
@@ -244,7 +244,7 @@ export function aggregateReadings(
   range: TimeRange,
   tz?: string | null
 ): AggregatedPoint[] {
-  if (range === "24h") {
+  if (range === "today") {
     return readings.map((r) => {
       const point: AggregatedPoint = {
         label: formatTime(r.observed_at, range, tz),
