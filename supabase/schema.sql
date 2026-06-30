@@ -83,8 +83,10 @@ returns table (
 language sql
 stable
 as $$
+  -- "day" is the station's LOCAL calendar day (its IANA timezone), so daily
+  -- buckets line up with the station's actual day rather than UTC midnight.
   select
-    (observed_at at time zone 'UTC')::date as day,
+    (observed_at at time zone coalesce(s.timezone, 'UTC'))::date as day,
     round(avg(temp_c)::numeric, 1)::float8,
     round(min(temp_c)::numeric, 1)::float8,
     round(max(temp_c)::numeric, 1)::float8,
@@ -108,7 +110,8 @@ as $$
       else round((count(*) filter (where solar_radiation >= 120) * 10.0 / 60.0)::numeric, 1)::float8
     end
   from weather_readings
-  where station_id = p_station_id and observed_at >= p_from
+  join stations s on s.id = weather_readings.station_id
+  where weather_readings.station_id = p_station_id and observed_at >= p_from
   group by day
   order by day;
 $$;
@@ -161,8 +164,9 @@ begin
     precip_total_mm, precip_rate_mm, uv, solar_radiation, sunshine_hours
   )
   select
-    station_id,
-    (observed_at at time zone 'UTC')::date as day,
+    weather_readings.station_id,
+    -- Station-local calendar day (see readings_daily).
+    (observed_at at time zone coalesce(s.timezone, 'UTC'))::date as day,
     round(avg(temp_c)::numeric, 1)::float8,
     round(min(temp_c)::numeric, 1)::float8,
     round(max(temp_c)::numeric, 1)::float8,
@@ -184,7 +188,8 @@ begin
       else round((count(*) filter (where solar_radiation >= 120) * 10.0 / 60.0)::numeric, 1)::float8
     end
   from weather_readings
-  group by station_id, day
+  join stations s on s.id = weather_readings.station_id
+  group by weather_readings.station_id, day
   on conflict (station_id, day) do update set
     temp_avg = excluded.temp_avg, temp_min = excluded.temp_min, temp_max = excluded.temp_max,
     temp_indoor_c = excluded.temp_indoor_c, feels_like_c = excluded.feels_like_c,
@@ -226,4 +231,12 @@ values ('Kingston', 'IKINGS664', 'wunderground', 'IKINGS664', true);
 --   -- above (they now compute sunshine_hours), and run rollup_daily() once to
 --   -- backfill the new column for existing days:
 --   --   select rollup_daily();
+--
+--   -- Timezone-aware daily grouping: readings_daily and rollup_daily now bucket
+--   -- by each station's LOCAL day (its IANA timezone) instead of UTC. Re-run both
+--   -- create-or-replace functions above, then backfill WITHOUT pruning so the
+--   -- persisted rollup is recomputed under the new day definition:
+--   --   select rollup_daily(1000000);
+--   -- Caveat: days older than the 90-day raw-retention window can't be recomputed
+--   -- (their raw readings are already pruned) and keep their prior UTC grouping.
 -- =============================================================
