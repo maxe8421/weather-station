@@ -6,7 +6,6 @@ import TimeRangeSelector from "./TimeRangeSelector";
 import CurrentConditions from "./CurrentConditions";
 import WeatherCharts from "./WeatherChart";
 import StationMap from "./StationMap";
-import Comparison from "./Comparison";
 import { CardSkeleton, ChartSkeleton, SummaryCard } from "./ui";
 import { supabaseBrowser } from "@/lib/supabaseBrowser";
 import { relativeTime, localTime, dayBounds, weekBounds, windowLabel, toYmd } from "@/lib/time";
@@ -32,7 +31,6 @@ export default function Dashboard({ stationId }: { stationId: string }) {
   const [range, setRange] = useState<TimeRange>("24h");
   const [customDate, setCustomDate] = useState<string | null>(null);
   const [customKind, setCustomKind] = useState<CustomKind>("day");
-  const [compareMode, setCompareMode] = useState(false);
   const [dataRange, setDataRange] = useState<{ min: string; max: string; dailyMin: string | null } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -192,23 +190,15 @@ export default function Dashboard({ stationId }: { stationId: string }) {
           </div>
         </div>
 
-        {compareMode ? (
-          <button
-            onClick={() => setCompareMode(false)}
-            className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800 transition-colors"
-          >
-            <span aria-hidden="true">←</span> Back to live view
-          </button>
-        ) : (
-          <div className="flex flex-col items-stretch sm:items-end gap-2">
+        <div className="flex flex-col items-stretch sm:items-end gap-2">
             <div className="flex items-center gap-2">
               <TimeRangeSelector selected={customDate ? null : range} onSelect={selectPreset} />
-              <button
-                onClick={() => setCompareMode(true)}
+              <a
+                href={`/compare?mode=dates&station=${stationId}`}
                 className="px-3 py-1.5 text-sm rounded-lg border bg-white text-slate-600 border-slate-200 hover:border-slate-300 transition-colors"
               >
                 Compare
-              </button>
+              </a>
             </div>
             <div className="flex items-center gap-2">
               <input
@@ -251,12 +241,9 @@ export default function Dashboard({ stationId }: { stationId: string }) {
                 : `Data available ${new Date(`${pickerMin}T00:00:00`).toLocaleDateString([], { day: "numeric", month: "short" })} – ${new Date(`${pickerMax}T00:00:00`).toLocaleDateString([], { day: "numeric", month: "short" })}`}
             </p>
           </div>
-        )}
       </div>
 
-      {compareMode ? (
-        <Comparison stationId={stationId} dataRange={dataRange} />
-      ) : loading ? (
+      {loading ? (
         <div className="space-y-5">
           <CardSkeleton />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
