@@ -23,7 +23,8 @@ const RANGES = [
 type Range = (typeof RANGES)[number]["value"];
 
 const METRICS = [
-  { key: "temp_avg", label: "Temperature", unit: "°C", kind: "mean" },
+  { key: "temp_avg", label: "Avg Temp", unit: "°C", kind: "mean" },
+  { key: "temp_max", label: "Max Temp", unit: "°C", kind: "max" },
   { key: "precip_total_mm", label: "Rainfall", unit: "mm", kind: "sum" },
   { key: "sunshine_hours", label: "Sunshine", unit: "h", kind: "sum" },
   { key: "wind_speed_kph", label: "Wind", unit: "km/h", kind: "mean" },
@@ -145,9 +146,13 @@ export default function ComparePage() {
   const aggregate = (st: SeriesStation, key: string, kind: string): number | null => {
     const vals = st.data.map((r) => r[key]).filter(num);
     if (!vals.length) return null;
+    if (kind === "max") return r1(Math.max(...vals));
     const sum = vals.reduce((a, b) => a + b, 0);
     return r1(kind === "sum" ? sum : sum / vals.length);
   };
+
+  // Table header glyph: Σ total, Ø average, ↑ peak.
+  const glyph = (kind: string) => (kind === "sum" ? "Σ" : kind === "max" ? "↑" : "Ø");
 
   return (
     <main className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
@@ -254,7 +259,7 @@ export default function ComparePage() {
                       <th className="text-left font-medium px-4 py-3">Station</th>
                       {METRICS.map((m) => (
                         <th key={m.key} className="text-right font-medium px-4 py-3 whitespace-nowrap">
-                          {m.kind === "sum" ? "Σ" : "Ø"} {m.label}
+                          {glyph(m.kind)} {m.label}
                         </th>
                       ))}
                     </tr>
