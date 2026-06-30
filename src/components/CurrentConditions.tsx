@@ -50,6 +50,7 @@ export default function CurrentConditions({
   }
 
   const compass = windDirToCompass(reading.wind_dir);
+  const calm = reading.wind_speed_kph === 0;
   const summary: string[] = [];
   if (reading.feels_like_c !== null) summary.push(`Feels like ${reading.feels_like_c}°`);
   if (reading.humidity !== null) summary.push(`Humidity ${reading.humidity}%`);
@@ -89,11 +90,13 @@ export default function CurrentConditions({
         <Metric label="Wind Speed" value={reading.wind_speed_kph} unit={`km/h ${compass}`} />
         <Metric label="Wind Gust" value={reading.wind_gust_kph} unit="km/h" />
         <div className="bg-white rounded-xl p-4 border border-slate-200 flex items-center gap-3">
-          <Compass deg={reading.wind_dir} size={60} />
+          <Compass deg={reading.wind_dir} size={60} calm={calm} />
           <div className="min-w-0">
             <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Direction</div>
             <div className="text-2xl font-semibold text-slate-900 mt-1">
-              {reading.wind_dir !== null ? (
+              {calm ? (
+                <span className="text-slate-400 text-xl">Calm</span>
+              ) : reading.wind_dir !== null ? (
                 <>
                   {reading.wind_dir}°<span className="text-sm font-normal text-slate-400 ml-1">{compass}</span>
                 </>

@@ -153,7 +153,7 @@ export default function Dashboard({ stationId }: { stationId: string }) {
         ? daily[daily.length - 1].sunshine_hours
         : null
       : (() => {
-          const days = sunshineByDay(readings, chartRange);
+          const days = sunshineByDay(readings, chartRange, station?.timezone ?? null);
           return days.length ? days[days.length - 1].hours : null;
         })();
 
@@ -261,7 +261,7 @@ export default function Dashboard({ stationId }: { stationId: string }) {
             Showing <span className="font-medium text-slate-900">{windowLabel(customDate, customKind)}</span>
           </div>
           <SummaryCard lines={summarizePeriod(readings, windowLabel(customDate, customKind))} />
-          <WeatherCharts mode={mode} readings={readings} daily={daily} range={chartRange} />
+          <WeatherCharts mode={mode} readings={readings} daily={daily} range={chartRange} tz={station?.timezone ?? null} />
         </>
       ) : (
         <>
@@ -281,7 +281,7 @@ export default function Dashboard({ stationId }: { stationId: string }) {
           {station && station.latitude !== null && station.longitude !== null && (
             <StationMap latitude={station.latitude} longitude={station.longitude} name={station.name} />
           )}
-          <WeatherCharts mode={mode} readings={readings} daily={daily} range={chartRange} />
+          <WeatherCharts mode={mode} readings={readings} daily={daily} range={chartRange} tz={station?.timezone ?? null} />
         </>
       )}
     </div>

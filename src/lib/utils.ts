@@ -20,11 +20,10 @@ function averageWindDir(degrees: number[]): number {
   return Math.round(avg);
 }
 
-export function formatTime(iso: string, range: string): string {
-  const d = new Date(iso);
-  if (range === "24h") return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  if (range === "7d") return d.toLocaleDateString([], { weekday: "short", hour: "2-digit" });
-  return d.toLocaleDateString([], { month: "short", day: "numeric" });
+export function formatTime(iso: string, range: string, tz?: string | null): string {
+  if (range === "24h") return zTime(iso, tz, { hour: "2-digit", minute: "2-digit" });
+  if (range === "7d") return zDate(iso, tz, { weekday: "short", hour: "2-digit" });
+  return zDate(iso, tz, { month: "short", day: "numeric" });
 }
 
 interface AggregatedPoint {
@@ -36,9 +35,11 @@ interface AggregatedPoint {
   [key: string]: number | string | null | undefined;
 }
 
-/** Format an ISO date (from the daily SQL aggregate) for an axis label. */
+/** Format an ISO date (from the daily SQL aggregate) for an axis label. Parsed
+ *  as local midnight so the stored calendar date renders as-is, rather than
+ *  shifting a day for viewers behind UTC. */
 export function formatDay(isoDate: string, range: TimeRange): string {
-  const d = new Date(isoDate);
+  const d = new Date(`${isoDate}T00:00:00`);
   const opts: Intl.DateTimeFormatOptions =
     range === "all"
       ? { year: "2-digit", month: "short", day: "numeric" }
@@ -56,27 +57,57 @@ const pad2 = (n: number) => String(n).padStart(2, "0");
 // Weathercloud derives its "hours" figure the same way.
 const SUNSHINE_THRESHOLD_WM2 = 120;
 
+// ---- timezone-aware bucketing --------------------------------------------
+// Charts bucket and label by the station's local clock (its IANA timezone),
+// not the viewer's. When tz is null/undefined we fall back to the viewer's
+// local time, preserving the previous behaviour.
+
+interface ZonedParts { y: number; mo: number; d: number; h: number }
+
+function zonedParts(iso: string, tz?: string | null): ZonedParts {
+  const date = new Date(iso);
+  if (!tz) return { y: date.getFullYear(), mo: date.getMonth(), d: date.getDate(), h: date.getHours() };
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hour12: false,
+  }).formatToParts(date);
+  const g = (t: string) => Number(parts.find((p) => p.type === t)!.value);
+  let h = g("hour");
+  if (h === 24) h = 0; // some locales emit "24" at midnight
+  return { y: g("year"), mo: g("month") - 1, d: g("day"), h };
+}
+
+/** A sortable YYYYMMDDHH key from zoned parts (HH omitted when daily). */
+const zKey = (z: ZonedParts, withHour: boolean) =>
+  Number(`${z.y}${pad2(z.mo + 1)}${pad2(z.d)}${withHour ? pad2(z.h) : "00"}`);
+const zDayStr = (z: ZonedParts) => `${z.y}-${pad2(z.mo + 1)}-${pad2(z.d)}`;
+const zTime = (iso: string, tz: string | null | undefined, opts: Intl.DateTimeFormatOptions) =>
+  new Date(iso).toLocaleTimeString([], tz ? { ...opts, timeZone: tz } : opts);
+const zDate = (iso: string, tz: string | null | undefined, opts: Intl.DateTimeFormatOptions) =>
+  new Date(iso).toLocaleDateString([], tz ? { ...opts, timeZone: tz } : opts);
+const zStr = (iso: string, tz: string | null | undefined, opts: Intl.DateTimeFormatOptions) =>
+  new Date(iso).toLocaleString([], tz ? { ...opts, timeZone: tz } : opts);
+
 /**
  * Hourly vector-mean wind direction for the 24h view. Buckets raw points into
  * clock hours and averages each bucket circularly, so the chart reads as one
  * clean point per hour instead of ~144 scattered raw observations.
  */
 export function hourlyWindDirection(
-  readings: WeatherReading[]
+  readings: WeatherReading[],
+  tz?: string | null
 ): { label: string; fullLabel: string; direction: number | null }[] {
   interface Bucket { sort: number; label: string; fullLabel: string; dirs: number[] }
   const groups = new Map<number, Bucket>();
 
   for (const r of readings) {
     if (r.wind_dir === null) continue;
-    const bucket = new Date(r.observed_at);
-    bucket.setMinutes(0, 0, 0);
-    const key = bucket.getTime();
+    const z = zonedParts(r.observed_at, tz);
+    const key = zKey(z, true);
     if (!groups.has(key)) {
       groups.set(key, {
         sort: key,
-        label: bucket.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        fullLabel: bucket.toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" }),
+        label: `${pad2(z.h)}:00`,
+        fullLabel: zStr(r.observed_at, tz, { weekday: "short", hour: "2-digit", minute: "2-digit" }),
         dirs: [],
       });
     }
@@ -117,16 +148,15 @@ export function sunshineHours(
  *  "today" figure in the current-conditions card). */
 export function sunshineByDay(
   readings: WeatherReading[],
-  range: TimeRange
+  range: TimeRange,
+  tz?: string | null
 ): { label: string; hours: number | null }[] {
   const byDay = new Map<string, { sort: number; date: string; rows: WeatherReading[] }>();
   for (const r of readings) {
-    const d = new Date(r.observed_at);
-    const day = new Date(d);
-    day.setHours(0, 0, 0, 0);
-    const key = day.toISOString();
-    if (!byDay.has(key)) byDay.set(key, { sort: day.getTime(), date: day.toISOString().slice(0, 10), rows: [] });
-    byDay.get(key)!.rows.push(r);
+    const z = zonedParts(r.observed_at, tz);
+    const date = zDayStr(z);
+    if (!byDay.has(date)) byDay.set(date, { sort: zKey(z, false), date, rows: [] });
+    byDay.get(date)!.rows.push(r);
   }
   return Array.from(byDay.values())
     .sort((a, b) => a.sort - b.sort)
@@ -142,15 +172,13 @@ interface SunshinePoint {
   hours: number | null;
 }
 
-const localDay = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-
 /**
  * Bright-sunshine hours bucketed to match the other charts: one point per raw
  * reading on 24h, 6-hour buckets on 7d. Each value is the hours of sunshine
  * accumulated within that bucket (each reading contributes the sunlit portion
  * of the interval that follows it). Daily ranges use the rollup instead.
  */
-export function sunshineSeries(readings: WeatherReading[], range: TimeRange): SunshinePoint[] {
+export function sunshineSeries(readings: WeatherReading[], range: TimeRange, tz?: string | null): SunshinePoint[] {
   const pts = readings
     .filter((r) => r.solar_radiation !== null)
     .map((r) => ({ t: new Date(r.observed_at).getTime(), s: r.solar_radiation as number }))
@@ -170,36 +198,36 @@ export function sunshineSeries(readings: WeatherReading[], range: TimeRange): Su
 
   if (range === "24h") {
     return contribs.map((c) => {
-      const d = new Date(c.t);
+      const iso = new Date(c.t).toISOString();
+      const z = zonedParts(iso, tz);
       return {
-        label: formatTime(d.toISOString(), "24h"),
+        label: formatTime(iso, "24h", tz),
         dayLabel: null,
-        fullLabel: d.toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" }),
-        day: localDay(d),
+        fullLabel: zStr(iso, tz, { weekday: "short", hour: "2-digit", minute: "2-digit" }),
+        day: zDayStr(z),
         hours: Math.round(c.hours * 100) / 100,
       };
     });
   }
 
-  // 7d: 6-hour windows aligned to 00:00 / 06:00 / 12:00 / 18:00 local, matching
-  // aggregateReadings so the x-axis lines up with the other 7-day charts.
+  // 7d: 6-hour windows aligned to 00:00 / 06:00 / 12:00 / 18:00 station-local,
+  // matching aggregateReadings so the x-axis lines up with the other 7-day charts.
   interface Bucket { sort: number; label: string; dayLabel: string | null; fullLabel: string; day: string; hours: number }
   const groups = new Map<string, Bucket>();
   for (const c of contribs) {
-    const d = new Date(c.t);
-    const bucketHour = Math.floor(d.getHours() / 6) * 6;
-    const bucket = new Date(d);
-    bucket.setHours(bucketHour, 0, 0, 0);
-    const key = bucket.toISOString();
+    const iso = new Date(c.t).toISOString();
+    const z = zonedParts(iso, tz);
+    const bucketHour = Math.floor(z.h / 6) * 6;
+    const key = `${zDayStr(z)}-${pad2(bucketHour)}`;
     if (!groups.has(key)) {
       const label = `${pad2(bucketHour)}:00`;
-      const dayShort = bucket.toLocaleDateString([], { weekday: "short", day: "numeric" });
+      const dayShort = zDate(iso, tz, { weekday: "short", day: "numeric" });
       groups.set(key, {
-        sort: bucket.getTime(),
+        sort: zKey(z, false) * 100 + bucketHour,
         label,
         dayLabel: bucketHour === 0 ? dayShort : null,
         fullLabel: `${dayShort}, ${label}`,
-        day: localDay(bucket),
+        day: zDayStr(z),
         hours: 0,
       });
     }
@@ -213,12 +241,13 @@ export function sunshineSeries(readings: WeatherReading[], range: TimeRange): Su
 export function aggregateReadings(
   readings: WeatherReading[],
   fields: (keyof WeatherReading)[],
-  range: TimeRange
+  range: TimeRange,
+  tz?: string | null
 ): AggregatedPoint[] {
   if (range === "24h") {
     return readings.map((r) => {
       const point: AggregatedPoint = {
-        label: formatTime(r.observed_at, range),
+        label: formatTime(r.observed_at, range, tz),
       };
       for (const f of fields) {
         point[f as string] = r[f] as number | null;
@@ -238,7 +267,7 @@ export function aggregateReadings(
   const groups = new Map<string, Bucket>();
 
   for (const r of readings) {
-    const d = new Date(r.observed_at);
+    const z = zonedParts(r.observed_at, tz);
     let key: string;
     let label: string;
     let dayLabel: string | null = null;
@@ -246,24 +275,20 @@ export function aggregateReadings(
     let sort: number;
 
     if (range === "7d") {
-      // 6-hour windows aligned to 00:00 / 06:00 / 12:00 / 18:00 local time.
-      const bucketHour = Math.floor(d.getHours() / 6) * 6;
-      const bucket = new Date(d);
-      bucket.setHours(bucketHour, 0, 0, 0);
-      key = bucket.toISOString();
-      sort = bucket.getTime();
+      // 6-hour windows aligned to 00:00 / 06:00 / 12:00 / 18:00 station-local time.
+      const bucketHour = Math.floor(z.h / 6) * 6;
+      key = `${zDayStr(z)}-${pad2(bucketHour)}`;
+      sort = zKey(z, false) * 100 + bucketHour;
       label = `${pad2(bucketHour)}:00`;
-      const dayShort = bucket.toLocaleDateString([], { weekday: "short", day: "numeric" });
+      const dayShort = zDate(r.observed_at, tz, { weekday: "short", day: "numeric" });
       fullLabel = `${dayShort}, ${label}`;
       // Mark the midnight bucket with the day so the axis reads clearly.
       if (bucketHour === 0) dayLabel = dayShort;
     } else {
       // Daily buckets (30d). Within 30 days a "month day" label is unique.
-      const day = new Date(d);
-      day.setHours(0, 0, 0, 0);
-      key = day.toISOString();
-      sort = day.getTime();
-      label = day.toLocaleDateString([], { month: "short", day: "numeric" });
+      key = zDayStr(z);
+      sort = zKey(z, false);
+      label = zDate(r.observed_at, tz, { month: "short", day: "numeric" });
       fullLabel = label;
     }
 

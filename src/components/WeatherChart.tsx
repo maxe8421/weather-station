@@ -40,6 +40,8 @@ interface ChartsProps {
   readings: WeatherReading[];
   daily: DailyReading[];
   range: TimeRange;
+  /** Station IANA timezone, so charts bucket/label by the station's local clock. */
+  tz?: string | null;
 }
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
@@ -102,7 +104,7 @@ function buildTimeAxis(range: TimeRange, rows: Row[]) {
   return <XAxis dataKey="label" interval={0} height={48} tickLine={false} tick={Tick} />;
 }
 
-export default function WeatherCharts({ mode, readings, daily, range }: ChartsProps) {
+export default function WeatherCharts({ mode, readings, daily, range, tz }: ChartsProps) {
   const isDaily = mode === "daily";
   const hasAny = isDaily ? daily.length > 0 : readings.length > 0;
   if (!hasAny) {
@@ -132,18 +134,19 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
     }
     if (range === "24h") {
       return readings.map((r) => {
-        const label = formatTime(r.observed_at, range);
+        const label = formatTime(r.observed_at, range, tz);
         const full = new Date(r.observed_at).toLocaleString([], {
           weekday: "short",
           hour: "2-digit",
           minute: "2-digit",
+          ...(tz ? { timeZone: tz } : {}),
         });
         const o: Row = { label, fullLabel: full };
         for (const f of fields) o[f.label] = read(r, f.key);
         return o;
       });
     }
-    const agg = aggregateReadings(readings, fields.map((f) => f.key as keyof WeatherReading), range);
+    const agg = aggregateReadings(readings, fields.map((f) => f.key as keyof WeatherReading), range, tz);
     return agg.map((p) => {
       const o: Row = { label: p.label, dayLabel: p.dayLabel ?? null, fullLabel: p.fullLabel ?? p.label };
       for (const f of fields) o[f.label] = read(p, f.key);
@@ -217,7 +220,7 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
     // used for longer ranges — instead of a hard-to-read scatter of raw points.
     const rows =
       range === "24h" && !isDaily
-        ? hourlyWindDirection(readings).map((p) => ({
+        ? hourlyWindDirection(readings, tz).map((p) => ({
             label: p.label,
             fullLabel: p.fullLabel,
             Direction: p.direction,
@@ -321,7 +324,7 @@ export default function WeatherCharts({ mode, readings, daily, range }: ChartsPr
       );
     }
 
-    const series = sunshineSeries(readings, range);
+    const series = sunshineSeries(readings, range, tz);
     if (!series.some((p) => p.hours !== null && p.hours !== undefined)) return <NoData title="Sunshine" />;
 
     // Running total that resets at each local-day boundary.

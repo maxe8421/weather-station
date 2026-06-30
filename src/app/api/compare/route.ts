@@ -17,7 +17,8 @@ async function fetchDaily(
     .eq("station_id", stationId)
     .gte("day", from)
     .lt("day", to)
-    .order("day", { ascending: true });
+    .order("day", { ascending: true })
+    .limit(5000); // explicit cap so long windows never silently truncate at 1000
   return { data: data ?? [], error };
 }
 
