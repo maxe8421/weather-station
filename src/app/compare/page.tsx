@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  LineChart, Line, ComposedChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import { Station } from "@/lib/types";
 import { ChartSkeleton } from "@/components/ui";
@@ -34,8 +34,12 @@ const METRICS = [
 ] as const;
 
 // Distinct line colours per selected station.
-const PALETTE = ["#dc2626", "#2563eb", "#059669", "#d97706", "#7c3aed", "#0891b2", "#db2777", "#4f46e5"];
-const MAX_STATIONS = PALETTE.length;
+const PALETTE = ["#dc2626", "#2563eb", "#059669", "#d97706"];
+const MAX_STATIONS = 4;
+
+// Temperature is drawn as one combined chart (min–avg–max band per station);
+// the rest get their own overlay chart.
+const CHART_METRICS = METRICS.filter((m) => !m.key.startsWith("temp_"));
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
 const num = (v: unknown): v is number => typeof v === "number" && !Number.isNaN(v);
@@ -131,7 +135,7 @@ export default function ComparePage() {
   // recomputing all of them on each render.
   const datasets = useMemo(() => {
     const out: Record<string, Row[]> = {};
-    for (const m of METRICS) {
+    for (const m of CHART_METRICS) {
       out[m.key] = days.map((day) => {
         const o: Row = { label: fmtDay(day, range) };
         byDay.forEach(({ map }, i) => {
@@ -143,6 +147,22 @@ export default function ComparePage() {
     }
     return out;
   }, [days, byDay, range]);
+
+  // Combined temperature dataset: per station a [min, max] band plus the average.
+  const tempDataset = useMemo(
+    () =>
+      days.map((day) => {
+        const o: Row & { [k: string]: number | string | null | [number, number] } = { label: fmtDay(day, range) };
+        byDay.forEach(({ map }, i) => {
+          const r = map.get(day);
+          const mn = r?.temp_min, mx = r?.temp_max, av = r?.temp_avg;
+          (o as Record<string, unknown>)[`band${i}`] = num(mn) && num(mx) ? [mn, mx] : null;
+          o[`avg${i}`] = num(av) ? av : null;
+        });
+        return o as Row;
+      }),
+    [days, byDay, range]
+  );
 
   const aggregate = (st: SeriesStation, key: string, kind: string): number | null => {
     const vals = st.data.map((r) => r[key]).filter(num);
@@ -291,7 +311,36 @@ export default function ComparePage() {
 
               {/* Overlay charts */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {METRICS.map((m) => (
+                {/* Temperature: one chart, each station a min–max band + average line. */}
+                <div className="bg-white rounded-xl p-4 border border-slate-200">
+                  <h3 className="font-medium text-slate-800 mb-3">Temperature (min–avg–max)</h3>
+                  <div className="h-[250px] xl:h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart data={tempDataset}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#d1d5db" />
+                        <XAxis dataKey="label" fontSize={12} tick={{ fill: "#6b7280" }} />
+                        <YAxis fontSize={12} tick={{ fill: "#6b7280" }} unit=" °C" />
+                        <Tooltip
+                          contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb" }}
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          formatter={(value: any, name: any) =>
+                            Array.isArray(value) ? [`${value[0]}–${value[1]} °C`, name] : [`${value} °C`, name]
+                          }
+                        />
+                        <Legend />
+                        {series.map((st, i) => (
+                          <Area key={`band-${st.id}`} type="monotone" dataKey={`band${i}`} name={`${st.name} range`} stroke="none" fill={PALETTE[i % PALETTE.length]} fillOpacity={0.13} legendType="none" connectNulls />
+                        ))}
+                        {series.map((st, i) => (
+                          <Line key={`avg-${st.id}`} type="monotone" dataKey={`avg${i}`} name={st.name} stroke={PALETTE[i % PALETTE.length]} dot={false} strokeWidth={2} connectNulls />
+                        ))}
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="text-xs text-gray-400 mt-1 text-center">Shaded band = daily min–max · line = average</div>
+                </div>
+
+                {CHART_METRICS.map((m) => (
                   <div key={m.key} className="bg-white rounded-xl p-4 border border-slate-200">
                     <h3 className="font-medium text-slate-800 mb-3">{m.label}</h3>
                     <div className="h-[250px] xl:h-[300px]">
