@@ -12,7 +12,7 @@ It is built to run on Vercel's free tier with a free Supabase Postgres database 
 - **Multi-station** — track any number of stations worldwide; add or remove them from a password-protected management page.
 - **Overview home page** — a card per station showing current outdoor temperature, indoor temperature (where available), 1-hour average wind speed, rainfall, and a one-line plain-English summary of the day (today's high/low, rainfall, and peak gust). Stations are grouped by region, with a per-region summary header and a cross-region comparison (warmest vs coolest region right now).
 - **Per-station dashboard** — current-conditions cards (including a compass dial for wind direction) plus time-series charts for temperature (outdoor/indoor/dew point), humidity, pressure, wind speed, rainfall, wind direction, a wind rose, UV/solar radiation, and daily hours of sunshine.
-- **Station-vs-station comparison** — a dedicated `/compare` view overlays 2–6 stations on shared per-metric charts (temperature, rainfall, sunshine, wind, humidity, pressure) over a chosen window, with a side-by-side aggregate table.
+- **Unified comparison view** — a single `/compare` page with two modes: **Stations** overlays 2–6 stations on shared per-metric charts (temperature, rainfall, sunshine, wind, humidity, pressure) with a side-by-side aggregate table; **Dates** overlays two time periods of one station (this month vs last, year vs last, same month last year, or a custom day/week/month/year) with stat deltas. A station's dashboard links straight into Dates mode for that station (`/compare?mode=dates&station=<id>`).
 - **Rule-based summaries** — deterministic, plain-English summaries of any window (no LLM, no API cost): warmest/coldest points, rainfall and wet days, peak gust, pressure trend, and hours of sunshine. Shown on both the home page (per card and per region) and each station's detail view.
 - **Hours of sunshine** — bright-sunshine duration derived from solar radiation using the WMO ≥120 W/m² threshold, charted per day and rolled up into the daily history (mirrors Weathercloud's "hours" figure under Solar Radiation).
 - **Adaptive aggregation** — raw 10-minute points for 24h, 6-hour buckets for 7d, daily averages for 30d and longer; temperature additionally shows daily min/avg/max, and wind direction is shown as an hourly circular (vector) mean on the 24h view rather than a hard-to-read scatter of raw points.
@@ -185,7 +185,7 @@ weather-station/
 │   │   ├── station/[id]/
 │   │   │   └── page.tsx        # Per-station detail route
 │   │   ├── compare/
-│   │   │   └── page.tsx        # Station-vs-station comparison view
+│   │   │   └── page.tsx        # Unified comparison view (Stations / Dates modes)
 │   │   ├── stations/
 │   │   │   └── page.tsx        # Password-gated add/remove stations UI
 │   │   └── api/
