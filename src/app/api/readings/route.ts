@@ -15,7 +15,7 @@ const VALID_RANGES: TimeRange[] = ["today", "7d", "30d", "1y", "all"];
 
 // Columns selected from the persisted daily rollup table (matches DailyReading).
 const DAILY_COLUMNS =
-  "day, temp_avg, temp_min, temp_max, temp_indoor_c, feels_like_c, dewpoint_c, humidity, pressure_mb, wind_speed_kph, wind_gust_kph, wind_dir, precip_total_mm, precip_rate_mm, uv, solar_radiation, sunshine_hours";
+  "day, temp_avg, temp_min, temp_max, temp_indoor_c, feels_like_c, dewpoint_c, humidity, humidity_indoor, pressure_mb, wind_speed_kph, wind_gust_kph, wind_dir, precip_total_mm, precip_rate_mm, uv, solar_radiation, sunshine_hours";
 
 function windowStart(range: TimeRange, now: number): Date {
   switch (range) {

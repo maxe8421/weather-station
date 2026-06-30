@@ -70,6 +70,7 @@ returns table (
   feels_like_c double precision,
   dewpoint_c double precision,
   humidity double precision,
+  humidity_indoor double precision,
   pressure_mb double precision,
   wind_speed_kph double precision,
   wind_gust_kph double precision,
@@ -94,6 +95,7 @@ as $$
     round(avg(feels_like_c)::numeric, 1)::float8,
     round(avg(dewpoint_c)::numeric, 1)::float8,
     round(avg(humidity)::numeric, 1)::float8,
+    round(avg(humidity_indoor)::numeric, 1)::float8,
     round(avg(pressure_mb)::numeric, 1)::float8,
     round(avg(wind_speed_kph)::numeric, 1)::float8,
     round(max(wind_gust_kph)::numeric, 1)::float8,
@@ -131,6 +133,7 @@ create table daily_readings (
   feels_like_c double precision,
   dewpoint_c double precision,
   humidity double precision,
+  humidity_indoor double precision,
   pressure_mb double precision,
   wind_speed_kph double precision,
   wind_gust_kph double precision,
@@ -160,7 +163,7 @@ declare
 begin
   insert into daily_readings (
     station_id, day, temp_avg, temp_min, temp_max, temp_indoor_c, feels_like_c,
-    dewpoint_c, humidity, pressure_mb, wind_speed_kph, wind_gust_kph, wind_dir,
+    dewpoint_c, humidity, humidity_indoor, pressure_mb, wind_speed_kph, wind_gust_kph, wind_dir,
     precip_total_mm, precip_rate_mm, uv, solar_radiation, sunshine_hours
   )
   select
@@ -174,6 +177,7 @@ begin
     round(avg(feels_like_c)::numeric, 1)::float8,
     round(avg(dewpoint_c)::numeric, 1)::float8,
     round(avg(humidity)::numeric, 1)::float8,
+    round(avg(humidity_indoor)::numeric, 1)::float8,
     round(avg(pressure_mb)::numeric, 1)::float8,
     round(avg(wind_speed_kph)::numeric, 1)::float8,
     round(max(wind_gust_kph)::numeric, 1)::float8,
@@ -194,6 +198,7 @@ begin
     temp_avg = excluded.temp_avg, temp_min = excluded.temp_min, temp_max = excluded.temp_max,
     temp_indoor_c = excluded.temp_indoor_c, feels_like_c = excluded.feels_like_c,
     dewpoint_c = excluded.dewpoint_c, humidity = excluded.humidity,
+    humidity_indoor = excluded.humidity_indoor,
     pressure_mb = excluded.pressure_mb, wind_speed_kph = excluded.wind_speed_kph,
     wind_gust_kph = excluded.wind_gust_kph, wind_dir = excluded.wind_dir,
     precip_total_mm = excluded.precip_total_mm, precip_rate_mm = excluded.precip_rate_mm,
@@ -231,6 +236,13 @@ values ('Kingston', 'IKINGS664', 'wunderground', 'IKINGS664', true);
 --   -- above (they now compute sunshine_hours), and run rollup_daily() once to
 --   -- backfill the new column for existing days:
 --   --   select rollup_daily();
+--
+--   -- Indoor humidity on the humidity chart: carry humidity_indoor through the
+--   -- daily rollup (raw today/7d already select it via *). Add the column, then
+--   -- re-run the readings_daily + rollup_daily create-or-replace functions above
+--   -- (they now average humidity_indoor) and backfill it for existing days:
+--   alter table daily_readings add column if not exists humidity_indoor double precision;
+--   --   select rollup_daily(1000000);
 --
 --   -- Timezone-aware daily grouping: readings_daily and rollup_daily now bucket
 --   -- by each station's LOCAL day (its IANA timezone) instead of UTC. Re-run both
