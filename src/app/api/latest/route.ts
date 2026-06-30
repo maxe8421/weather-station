@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import { getSupabasePublic } from "@/lib/supabase";
 import { sunshineHours } from "@/lib/utils";
 
+// Cache the computed response for 60s. The home page polls every 60s per client
+// (and live-updates via Supabase realtime), so without this every viewer would
+// recompute per-station daily aggregates from raw on every poll. ISR-style
+// caching means all viewers share one computation per minute.
+export const revalidate = 60;
+
 const r1 = (n: number) => Math.round(n * 10) / 10;
 const mean = (v: number[]) => (v.length ? r1(v.reduce((a, b) => a + b, 0) / v.length) : null);
 
@@ -71,8 +77,12 @@ export async function GET() {
   // Resolve all stations concurrently rather than sequentially — this endpoint
   // is polled every 60s by the home page, so the previous serial N+1 loop was
   // the dominant source of latency.
+  // Resolve each station independently; a single station's query error degrades
+  // that one card rather than failing the whole endpoint (allSettled semantics
+  // via a per-station try/catch).
   const results = await Promise.all(
     stations.map(async (station) => {
+     try {
       const [{ data: readings }, { data: hourReadings }, { data: dayReadings }] = await Promise.all([
         supabase
           .from("weather_readings")
@@ -111,6 +121,10 @@ export async function GET() {
         today,
         summary: buildSummary(today),
       };
+     } catch (err) {
+       console.error(`/api/latest failed for station ${station.id}:`, err);
+       return { ...station, latest: null, avg_wind_kph: null, today: null, summary: null };
+     }
     })
   );
 

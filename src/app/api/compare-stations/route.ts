@@ -10,6 +10,10 @@ const DAILY_COLUMNS =
 
 const VALID_RANGES = ["7d", "30d", "1y", "all"] as const;
 
+// Explicit cap on rollup reads so `range=all` never silently truncates at
+// PostgREST's 1000-row default. ~14 years of daily rows per station.
+const DAILY_ROW_CAP = 5000;
+
 function windowFromIso(range: string): string {
   const days = range === "7d" ? 7 : range === "30d" ? 30 : range === "1y" ? 365 : 36500;
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
@@ -17,12 +21,13 @@ function windowFromIso(range: string): string {
 
 export async function GET(request: NextRequest) {
   const p = request.nextUrl.searchParams;
-  const ids = (p.get("ids") || "").split(",").map((s) => s.trim()).filter(Boolean);
+  // De-duplicate so `?ids=A,A` doesn't render a station twice.
+  const ids = [...new Set((p.get("ids") || "").split(",").map((s) => s.trim()).filter(Boolean))];
   const rangeParam = p.get("range") || "30d";
   const range = (VALID_RANGES as readonly string[]).includes(rangeParam) ? rangeParam : "30d";
 
-  if (ids.length < 1 || ids.length > 6 || !ids.every(isValidUuid)) {
-    return NextResponse.json({ error: "Provide 1–6 valid station ids" }, { status: 400 });
+  if (ids.length < 1 || ids.length > 8 || !ids.every(isValidUuid)) {
+    return NextResponse.json({ error: "Provide 1–8 valid station ids" }, { status: 400 });
   }
 
   const supabase = getSupabasePublic();
@@ -41,15 +46,21 @@ export async function GET(request: NextRequest) {
 
   const stations = await Promise.all(
     ids.map(async (id) => {
-      const { data } = useRpc
-        ? await supabase.rpc("readings_daily", { p_station_id: id, p_from: fromIso })
-        : await supabase
-            .from("daily_readings")
-            .select(DAILY_COLUMNS)
-            .eq("station_id", id)
-            .gte("day", fromDate)
-            .order("day", { ascending: true });
-      return { id, name: nameById.get(id) ?? id, data: data ?? [] };
+      try {
+        const { data } = useRpc
+          ? await supabase.rpc("readings_daily", { p_station_id: id, p_from: fromIso })
+          : await supabase
+              .from("daily_readings")
+              .select(DAILY_COLUMNS)
+              .eq("station_id", id)
+              .gte("day", fromDate)
+              .order("day", { ascending: true })
+              .limit(DAILY_ROW_CAP);
+        return { id, name: nameById.get(id) ?? id, data: data ?? [] };
+      } catch (err) {
+        console.error(`/api/compare-stations failed for station ${id}:`, err);
+        return { id, name: nameById.get(id) ?? id, data: [] };
+      }
     })
   );
 

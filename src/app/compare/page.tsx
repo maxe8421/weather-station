@@ -32,7 +32,8 @@ const METRICS = [
 ] as const;
 
 // Distinct line colours per selected station.
-const PALETTE = ["#dc2626", "#2563eb", "#059669", "#d97706", "#7c3aed", "#0891b2"];
+const PALETTE = ["#dc2626", "#2563eb", "#059669", "#d97706", "#7c3aed", "#0891b2", "#db2777", "#4f46e5"];
+const MAX_STATIONS = PALETTE.length;
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
 const num = (v: unknown): v is number => typeof v === "number" && !Number.isNaN(v);
@@ -74,7 +75,7 @@ export default function ComparePage() {
         const pre = urlStations
           ? urlStations.split(",").filter((id) => list.some((s) => s.id === id))
           : list.slice(0, 2).map((s) => s.id);
-        setSelected(pre.slice(0, 6));
+        setSelected([...new Set(pre)].slice(0, MAX_STATIONS));
       })
       .catch(() => setError("Failed to load stations"));
   }, []);
@@ -110,7 +111,8 @@ export default function ComparePage() {
   }, [mode, dateStation]);
 
   const toggle = (id: string) =>
-    setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : cur.length >= 6 ? cur : [...cur, id]));
+    setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : cur.length >= MAX_STATIONS ? cur : [...cur, id]));
+  const atCap = selected.length >= MAX_STATIONS;
 
   const days = useMemo(() => {
     const set = new Set<string>();
@@ -123,15 +125,22 @@ export default function ComparePage() {
     [series]
   );
 
-  const datasetFor = (key: string): Row[] =>
-    days.map((day) => {
-      const o: Row = { label: fmtDay(day, range) };
-      byDay.forEach(({ map }, i) => {
-        const v = map.get(day)?.[key];
-        o[`s${i}`] = num(v) ? v : null;
+  // Build every metric's overlaid dataset once per data change, rather than
+  // recomputing all of them on each render.
+  const datasets = useMemo(() => {
+    const out: Record<string, Row[]> = {};
+    for (const m of METRICS) {
+      out[m.key] = days.map((day) => {
+        const o: Row = { label: fmtDay(day, range) };
+        byDay.forEach(({ map }, i) => {
+          const v = map.get(day)?.[m.key];
+          o[`s${i}`] = num(v) ? v : null;
+        });
+        return o;
       });
-      return o;
-    });
+    }
+    return out;
+  }, [days, byDay, range]);
 
   const aggregate = (st: SeriesStation, key: string, kind: string): number | null => {
     const vals = st.data.map((r) => r[key]).filter(num);
@@ -187,13 +196,16 @@ export default function ComparePage() {
               {stations.map((s) => {
                 const on = selected.includes(s.id);
                 const i = selected.indexOf(s.id);
+                const disabled = !on && atCap;
                 return (
                   <button
                     key={s.id}
                     onClick={() => toggle(s.id)}
+                    disabled={disabled}
+                    title={disabled ? `Up to ${MAX_STATIONS} stations — deselect one first` : undefined}
                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                       on ? "bg-white border-slate-300 text-slate-800 shadow-sm" : "bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300"
-                    }`}
+                    } ${disabled ? "opacity-40 cursor-not-allowed hover:border-slate-200" : ""}`}
                   >
                     <span className="w-2.5 h-2.5 rounded-full" style={{ background: on ? PALETTE[i % PALETTE.length] : "#cbd5e1" }} />
                     {s.name}
@@ -201,6 +213,7 @@ export default function ComparePage() {
                 );
               })}
             </div>
+            {atCap && <p className="text-xs text-slate-400">Comparing the maximum of {MAX_STATIONS} stations — deselect one to add another.</p>}
             <div className="flex gap-1 bg-slate-100 rounded-lg p-1 w-fit">
               {RANGES.map((rg) => (
                 <button
@@ -276,7 +289,7 @@ export default function ComparePage() {
                     <h3 className="font-medium text-slate-800 mb-3">{m.label}</h3>
                     <div className="h-[250px] xl:h-[300px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={datasetFor(m.key)}>
+                        <LineChart data={datasets[m.key]}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#d1d5db" />
                           <XAxis dataKey="label" fontSize={12} tick={{ fill: "#6b7280" }} />
                           <YAxis fontSize={12} tick={{ fill: "#6b7280" }} unit={m.unit ? ` ${m.unit}` : undefined} />
