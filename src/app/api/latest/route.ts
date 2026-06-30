@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabasePublic } from "@/lib/supabase";
+import { startOfTodayUtc } from "@/lib/time";
 import { sunshineHours } from "@/lib/utils";
 
 // Cache the computed response for 60s. The home page polls every 60s per client
@@ -29,7 +30,7 @@ export interface TodayStats {
   sunshine: number | null;
 }
 
-/** Structured daily aggregates from the last 24h of readings (plus today's rain). */
+/** Structured aggregates over today's readings (since station-local midnight). */
 function todayStats(rows: DayRow[], rainToday: number | null): TodayStats {
   const temps = rows.map((r) => r.temp_c).filter((v): v is number => v !== null);
   const winds = rows.map((r) => r.wind_speed_kph).filter((v): v is number => v !== null);
@@ -72,7 +73,6 @@ export async function GET() {
   }
 
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
   // Resolve all stations concurrently rather than sequentially — this endpoint
   // is polled every 60s by the home page, so the previous serial N+1 loop was
@@ -83,6 +83,8 @@ export async function GET() {
   const results = await Promise.all(
     stations.map(async (station) => {
      try {
+      // Today's stats run from the station's own local midnight.
+      const dayStart = startOfTodayUtc(station.timezone ?? null).toISOString();
       const [{ data: readings }, { data: hourReadings }, { data: dayReadings }] = await Promise.all([
         supabase
           .from("weather_readings")
@@ -99,7 +101,7 @@ export async function GET() {
           .from("weather_readings")
           .select("observed_at, temp_c, wind_speed_kph, wind_gust_kph, solar_radiation")
           .eq("station_id", station.id)
-          .gte("observed_at", oneDayAgo),
+          .gte("observed_at", dayStart),
       ]);
 
       const windValues = (hourReadings || [])

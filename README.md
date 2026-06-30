@@ -15,7 +15,7 @@ It is built to run on Vercel's free tier with a free Supabase Postgres database 
 - **Unified comparison view** — a single `/compare` page with two modes: **Stations** overlays 2–6 stations on shared per-metric charts (temperature, rainfall, sunshine, wind, humidity, pressure) with a side-by-side aggregate table; **Dates** overlays two time periods of one station (this month vs last, year vs last, same month last year, or a custom day/week/month/year) with stat deltas. A station's dashboard links straight into Dates mode for that station (`/compare?mode=dates&station=<id>`).
 - **Rule-based summaries** — deterministic, plain-English summaries of any window (no LLM, no API cost): warmest/coldest points, rainfall and wet days, peak gust, pressure trend, and hours of sunshine. Shown on both the home page (per card and per region) and each station's detail view.
 - **Hours of sunshine** — bright-sunshine duration derived from solar radiation using the WMO ≥120 W/m² threshold, charted per day and rolled up into the daily history (mirrors Weathercloud's "hours" figure under Solar Radiation).
-- **Adaptive aggregation** — raw 10-minute points for 24h, 6-hour buckets for 7d, daily averages for 30d and longer; temperature additionally shows daily min/avg/max, and wind direction is shown as an hourly circular (vector) mean on the 24h view rather than a hard-to-read scatter of raw points.
+- **Adaptive aggregation** — raw 10-minute points for today (since station-local midnight), 6-hour buckets for 7d, daily averages for 30d and longer; temperature additionally shows daily min/avg/max, and wind direction is shown as an hourly circular (vector) mean on the today view rather than a hard-to-read scatter of raw points.
 - **Auto-refresh** — the UI re-polls every 60 seconds with no manual reload.
 - **Health monitoring** — a `/api/health` endpoint returns HTTP 500 when any station's data goes stale, designed to drive email alerts from an external cron monitor.
 - **Metric units throughout** — °C, km/h, hPa, mm.
@@ -52,7 +52,7 @@ npm install
 
 In the Supabase dashboard open the **SQL Editor** and run the contents of [`supabase/schema.sql`](supabase/schema.sql). This creates the `stations` and `weather_readings` tables, the `daily_readings` rollup, the aggregation functions, the indexes, the row-level-security read policies, and inserts your primary station.
 
-> **Upgrading an existing database?** The bottom of `schema.sql` has a `MIGRATION` block with the incremental `alter table` statements. The hours-of-sunshine feature in particular adds a `daily_readings.sunshine_hours` column and updates the `readings_daily` / `rollup_daily` functions — apply those, then run `select rollup_daily();` once to backfill sunshine for existing days. (The live 24h/7d sunshine chart works without any migration, since it is computed in the browser from raw solar-radiation readings; only the 30d+ daily history depends on the rollup.)
+> **Upgrading an existing database?** The bottom of `schema.sql` has a `MIGRATION` block with the incremental `alter table` statements. The hours-of-sunshine feature in particular adds a `daily_readings.sunshine_hours` column and updates the `readings_daily` / `rollup_daily` functions — apply those, then run `select rollup_daily();` once to backfill sunshine for existing days. (The live today/7d sunshine chart works without any migration, since it is computed in the browser from raw solar-radiation readings; only the 30d+ daily history depends on the rollup.)
 
 ### 3. Configure environment variables
 
@@ -104,7 +104,7 @@ curl "http://localhost:3000/api/collect?secret=YOUR_CRON_SECRET"
 curl "http://localhost:3000/api/readings?station_id=<uuid>&range=7d"
 ```
 
-`range` accepts `24h`, `7d`, `30d`, `1y`, `all`.
+`range` accepts `today`, `7d`, `30d`, `1y`, `all`. `today` covers the station's own calendar day, from its local midnight to now.
 
 ### Add a station (admin only)
 
@@ -203,7 +203,7 @@ weather-station/
 │   │   ├── Compass.tsx            # SVG wind-direction compass dial
 │   │   ├── Comparison.tsx         # Single-station time-period comparison
 │   │   ├── StationPicker.tsx      # Station dropdown
-│   │   └── TimeRangeSelector.tsx  # 24h/7d/30d/1y/all toggle
+│   │   └── TimeRangeSelector.tsx  # today/7d/30d/1y/all toggle
 │   └── lib/
 │       ├── supabase.ts            # Lazy admin (service) + public (anon) clients
 │       ├── wunderground.ts        # WU PWS API fetch + row mapping

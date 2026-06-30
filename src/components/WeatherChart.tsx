@@ -116,7 +116,7 @@ interface Ctx {
 }
 
 // Build a {label, <seriesLabel>: value} dataset for a set of fields,
-// transparently handling raw (24h), client-aggregated (7d) and server-aggregated
+// transparently handling raw (today), client-aggregated (7d) and server-aggregated
 // daily (30d/1y/all) inputs.
 function buildRows({ isDaily, readings, daily, range, tz }: Ctx, fields: FieldDef[]): Row[] {
   const read = (obj: unknown, key: string): number | string | null =>
@@ -130,7 +130,7 @@ function buildRows({ isDaily, readings, daily, range, tz }: Ctx, fields: FieldDe
       return o;
     });
   }
-  if (range === "24h") {
+  if (range === "today") {
     return readings.map((r) => {
       const label = formatTime(r.observed_at, range, tz);
       const full = new Date(r.observed_at).toLocaleString([], {
@@ -213,12 +213,12 @@ function TemperatureCard({ ctx }: { ctx: Ctx }) {
 
 function WindDirectionCard({ ctx }: { ctx: Ctx }) {
   const { range, isDaily, readings, tz } = ctx;
-  const title = range === "24h" ? "Wind Direction (Hourly Average)" : "Wind Direction (Average)";
+  const title = range === "today" ? "Wind Direction (Hourly Average)" : "Wind Direction (Average)";
 
-  // 24h shows hourly vector-mean averages — the same circular averaging used for
+  // Today shows hourly vector-mean averages — the same circular averaging used for
   // longer ranges — instead of a hard-to-read scatter of raw points.
   const rows =
-    range === "24h" && !isDaily
+    range === "today" && !isDaily
       ? hourlyWindDirection(readings, tz).map((p) => ({
           label: p.label,
           fullLabel: p.fullLabel,
@@ -298,7 +298,7 @@ function UVCard({ ctx }: { ctx: Ctx }) {
   );
 }
 
-// Bright-sunshine hours (WMO ≥120 W/m²). On 24h / 7d it's a cumulative line that
+// Bright-sunshine hours (WMO ≥120 W/m²). On Today / 7d it's a cumulative line that
 // climbs through each day and resets at midnight (cumulative within the day),
 // built from per-reading / 6-hour increments. On 30d and longer it's a daily-total
 // bar chart. Mirrors Weathercloud's "hours" figure under Solar Radiation.

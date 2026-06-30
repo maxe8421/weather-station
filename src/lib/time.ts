@@ -35,6 +35,42 @@ export function windowLabel(dateStr: string, kind: "day" | "week"): string {
   return `Week of ${from.toLocaleDateString([], { day: "numeric", month: "long" })}`;
 }
 
+/** UTC offset (ms, local = utc + offset) of an IANA timezone at a given instant. */
+function tzOffsetMs(tz: string, at: Date): number {
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  const p = Object.fromEntries(dtf.formatToParts(at).map((x) => [x.type, x.value]));
+  const asUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
+  return asUtc - at.getTime();
+}
+
+/**
+ * UTC instant of the most recent local midnight ("start of today") in tz — used
+ * to scope the "Today" range to the station's own calendar day. Falls back to
+ * the server/UTC day when tz is null.
+ */
+export function startOfTodayUtc(tz: string | null, now: Date = new Date()): Date {
+  const dtf = new Intl.DateTimeFormat(
+    "en-CA",
+    tz
+      ? { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }
+      : { year: "numeric", month: "2-digit", day: "2-digit" }
+  );
+  const [y, m, d] = dtf.format(now).split("-").map(Number);
+  const asUtc = Date.UTC(y, m - 1, d, 0, 0, 0);
+  if (!tz) return new Date(asUtc);
+  // Correct the naive UTC-midnight by the zone's offset at that instant.
+  return new Date(asUtc - tzOffsetMs(tz, new Date(asUtc)));
+}
+
 /** Current wall-clock time at a station's timezone, e.g. "14:32". */
 export function localTime(timezone: string | null, now: Date = new Date()): string | null {
   if (!timezone) return null;

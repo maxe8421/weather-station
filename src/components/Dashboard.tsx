@@ -13,7 +13,7 @@ import { summarizePeriod, summarizeDaily } from "@/lib/summary";
 import { sunshineByDay } from "@/lib/utils";
 
 const RANGE_LABEL: Record<string, string> = {
-  "24h": "the last 24 hours",
+  today: "today",
   "7d": "the last 7 days",
   "30d": "the last 30 days",
   "1y": "the last year",
@@ -28,7 +28,7 @@ export default function Dashboard({ stationId }: { stationId: string }) {
   const [readings, setReadings] = useState<WeatherReading[]>([]);
   const [daily, setDaily] = useState<DailyReading[]>([]);
   const [latest, setLatest] = useState<WeatherReading | null>(null);
-  const [range, setRange] = useState<TimeRange>("24h");
+  const [range, setRange] = useState<TimeRange>("today");
   const [customDate, setCustomDate] = useState<string | null>(null);
   const [customKind, setCustomKind] = useState<CustomKind>("day");
   const [dataRange, setDataRange] = useState<{ min: string; max: string; dailyMin: string | null } | null>(null);
@@ -38,9 +38,9 @@ export default function Dashboard({ stationId }: { stationId: string }) {
   const [now, setNow] = useState(() => new Date());
   const lastObservedRef = useRef<string | null>(null);
 
-  // Chart granularity: a custom day behaves like 24h (raw points), a custom
+  // Chart granularity: a custom day behaves like Today (raw points), a custom
   // week like 7d (6-hour buckets); otherwise follow the selected preset.
-  const chartRange: TimeRange = customDate ? (customKind === "day" ? "24h" : "7d") : range;
+  const chartRange: TimeRange = customDate ? (customKind === "day" ? "today" : "7d") : range;
 
   useEffect(() => {
     const clock = setInterval(() => setNow(new Date()), 30 * 1000);

@@ -54,7 +54,7 @@ function regionStats(list: StationWithLatest[]): RegionStats {
 /** One-line summary headline for a region, based on today's daily aggregates. */
 function regionHeadline(s: RegionStats): string {
   const parts: string[] = [`${s.count} station${s.count === 1 ? "" : "s"}`];
-  if (s.avgTemp !== null) parts.push(`avg ${s.avgTemp}° (24h)`);
+  if (s.avgTemp !== null) parts.push(`avg ${s.avgTemp}° (today)`);
   if (s.warmest && s.count > 1) parts.push(`warmest ${s.warmest.name} ${s.warmest.today!.tempHigh}°`);
   if (s.windiest && (s.windiest.today!.windAvg ?? 0) > 0) parts.push(`windiest ${s.windiest.name} ${s.windiest.today!.windAvg} km/h`);
   if (s.maxRain && s.maxRain > 0) parts.push(`up to ${s.maxRain} mm rain`);
@@ -133,7 +133,7 @@ function networkHighlights(stations: StationWithLatest[]): Highlight[] {
   if (regions.size >= 2) {
     const avgByRegion = Array.from(regions.entries()).map(([k, v]) => ({ region: k, avg: r1(v.reduce((a, b) => a + b, 0) / v.length) }));
     const warm = avgByRegion.reduce((m, r) => (r.avg > m.avg ? r : m));
-    out.push({ icon: "🏆", label: "Warmest region", value: `${warm.avg}°`, sub: `${warm.region} · 24h avg` });
+    out.push({ icon: "🏆", label: "Warmest region", value: `${warm.avg}°`, sub: `${warm.region} · today avg` });
   }
 
   return out;
@@ -304,7 +304,7 @@ export default function Home() {
                 {highlights.length > 0 && (
                   <section>
                     <h2 className="text-sm font-medium text-slate-500 uppercase tracking-wide mb-3">
-                      Around the network · last 24h
+                      Around the network · today
                     </h2>
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
                       {highlights.map((h) => (
