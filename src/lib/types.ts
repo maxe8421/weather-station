@@ -47,6 +47,7 @@ export interface DailyReading {
   feels_like_c: number | null;
   dewpoint_c: number | null;
   humidity: number | null;
+  humidity_indoor: number | null;
   pressure_mb: number | null;
   wind_speed_kph: number | null;
   wind_gust_kph: number | null;

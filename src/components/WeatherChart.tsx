@@ -211,6 +211,21 @@ function TemperatureCard({ ctx }: { ctx: Ctx }) {
   return <LineCard ctx={ctx} title={title} unit="°C" fields={fields} />;
 }
 
+function HumidityCard({ ctx }: { ctx: Ctx }) {
+  // Only show the Indoor series when this station actually reports indoor humidity.
+  const { isDaily, readings, daily } = ctx;
+  const hasIndoor = isDaily
+    ? daily.some((r) => r.humidity_indoor !== null)
+    : readings.some((r) => r.humidity_indoor !== null);
+  const fields: FieldDef[] = [
+    { key: "humidity", label: hasIndoor ? "Outdoor" : "Humidity", color: COLORS.cyan },
+    ...(hasIndoor
+      ? [{ key: "humidity_indoor" as keyof WeatherReading, label: "Indoor", color: COLORS.orange }]
+      : []),
+  ];
+  return <LineCard ctx={ctx} title="Humidity" unit="%" fields={fields} />;
+}
+
 function WindDirectionCard({ ctx }: { ctx: Ctx }) {
   const { range, isDaily, readings, tz } = ctx;
   const title = range === "today" ? "Wind Direction (Hourly Average)" : "Wind Direction (Average)";
@@ -406,7 +421,7 @@ export default function WeatherCharts({ mode, readings, daily, range, tz }: Char
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <TemperatureCard ctx={ctx} />
-      <LineCard ctx={ctx} title="Humidity" unit="%" fields={[{ key: "humidity", label: "Humidity", color: COLORS.cyan }]} />
+      <HumidityCard ctx={ctx} />
       <LineCard ctx={ctx} title="Pressure" unit="hPa" fields={[{ key: "pressure_mb", label: "Pressure", color: COLORS.purple }]} />
       <LineCard ctx={ctx} title="Wind Speed" unit="km/h" fields={[
         { key: "wind_speed_kph", label: "Speed", color: COLORS.green },
