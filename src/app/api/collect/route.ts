@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
   const typed = stations as StationRow[];
   const wuStations = typed.filter((s) => s.source !== "weathercloud");
   const wcStations = typed.filter((s) => s.source === "weathercloud" && s.source_id);
+  const wcMissingSourceId = typed.filter((s) => s.source === "weathercloud" && !s.source_id);
 
   // Indoor data for the primary station needs an authenticated Weathercloud
   // session; fetch it once up front (and reuse the warmed session below).
@@ -44,7 +45,12 @@ export async function GET(request: NextRequest) {
       ? fetchWeathercloudAuthed(indoorDeviceId)
       : Promise.resolve(null);
 
-  type Outcome = { station: string; status: "ok" | "no_data"; row: ReadingRow | null };
+  type Outcome = {
+    station: string;
+    status: "ok" | "no_data";
+    row: ReadingRow | null;
+    error?: string;
+  };
 
   // Wunderground calls hit one host and are independent — parallelise (capped).
   const wuOutcomes = mapLimit<StationRow, Outcome>(wuStations, 5, async (station) => {
@@ -59,9 +65,9 @@ export async function GET(request: NextRequest) {
 
   // Weathercloud public endpoints are rate-sensitive — keep concurrency low.
   const wcOutcomes = mapLimit<StationRow, Outcome>(wcStations, 2, async (station) => {
-    const data = await fetchWeathercloudPublic(station.source_id!);
     const label = station.source_id!;
-    if (!data) return { station: label, status: "no_data", row: null };
+    const { row: data, error } = await fetchWeathercloudPublic(station.source_id!);
+    if (!data) return { station: label, status: "no_data", row: null, error };
     return {
       station: label,
       status: "ok",
@@ -72,15 +78,26 @@ export async function GET(request: NextRequest) {
   const [indoor, wu, wc] = await Promise.all([indoorPromise, wuOutcomes, wcOutcomes]);
 
   // Attach indoor metrics to the primary station's row.
-  if (primary && indoor) {
+  if (primary && indoor?.row) {
     const target = [...wu, ...wc].find((o) => o.row && o.row.station_id === primary.id);
     if (target?.row) {
-      target.row.temp_indoor_c = indoor.temp_indoor_c ?? null;
-      target.row.humidity_indoor = indoor.humidity_indoor ?? null;
+      target.row.temp_indoor_c = indoor.row.temp_indoor_c ?? null;
+      target.row.humidity_indoor = indoor.row.humidity_indoor ?? null;
     }
   }
 
-  const outcomes = [...wu, ...wc];
+  // Stations missing a source_id can never be fetched — surface that instead of
+  // dropping them from the response entirely (previously undiagnosable without
+  // digging through Vercel logs — see issue #1, "Weathercloud ingestion error
+  // visibility").
+  const missingSourceIdOutcomes: Outcome[] = wcMissingSourceId.map((s) => ({
+    station: s.wunderground_id ?? s.id,
+    status: "no_data",
+    row: null,
+    error: "station has source=weathercloud but no source_id configured",
+  }));
+
+  const outcomes = [...wu, ...wc, ...missingSourceIdOutcomes];
   const rows = outcomes.map((o) => o.row).filter((r): r is ReadingRow => r !== null);
 
   let upsertError: string | undefined;
@@ -94,7 +111,7 @@ export async function GET(request: NextRequest) {
   const results = outcomes.map((o) => ({
     station: o.station,
     status: upsertError ? "error" : o.status,
-    error: o.status === "ok" ? upsertError : undefined,
+    error: upsertError ? (o.status === "ok" ? upsertError : undefined) : o.error,
   }));
 
   const anyStored = !upsertError && outcomes.some((o) => o.status === "ok");

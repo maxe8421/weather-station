@@ -77,6 +77,12 @@ async function login(): Promise<void> {
 
 type PartialRow = Partial<Record<ReadingColumn, unknown>>;
 
+/** Result of a Weathercloud fetch attempt, carrying a diagnosable reason on failure. */
+export interface WeathercloudResult {
+  row: PartialRow | null;
+  error?: string;
+}
+
 function parseValues(text: string): PartialRow | null {
   if (!text.startsWith("{")) return null;
   let d: Record<string, number | undefined>;
@@ -164,16 +170,29 @@ function valuesUrl(deviceId: string): string {
 }
 
 /** Public station/METAR data — no authentication required. */
-export async function fetchWeathercloudPublic(deviceId: string): Promise<PartialRow | null> {
+export async function fetchWeathercloudPublic(deviceId: string): Promise<WeathercloudResult> {
   try {
     const res = await fetchWithTimeout(valuesUrl(deviceId), {
       headers: { "X-Requested-With": "XMLHttpRequest" },
       cache: "no-store",
     });
-    return parseValues(await res.text());
+    if (!res.ok) {
+      const error = `HTTP ${res.status}`;
+      console.error(`Weathercloud public fetch failed for ${deviceId}: ${error}`);
+      return { row: null, error };
+    }
+    const text = await res.text();
+    const row = parseValues(text);
+    if (!row) {
+      const error = `unexpected response body: ${text.slice(0, 120)}`;
+      console.error(`Weathercloud public fetch failed for ${deviceId}: ${error}`);
+      return { row: null, error };
+    }
+    return { row };
   } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
     console.error(`Weathercloud public fetch failed for ${deviceId}:`, err);
-    return null;
+    return { row: null, error };
   }
 }
 
@@ -182,7 +201,7 @@ export async function fetchWeathercloudPublic(deviceId: string): Promise<Partial
  * Reuses the cached session; only logs in if the cached session is missing or
  * has expired (detected by a non-JSON response), then retries exactly once.
  */
-export async function fetchWeathercloudAuthed(deviceId: string): Promise<PartialRow | null> {
+export async function fetchWeathercloudAuthed(deviceId: string): Promise<WeathercloudResult> {
   async function attempt(): Promise<string> {
     const headers: Record<string, string> = {
       Cookie: cachedCookie ?? "",
@@ -207,11 +226,18 @@ export async function fetchWeathercloudAuthed(deviceId: string): Promise<Partial
       await login();
       text = await attempt();
     }
-    return parseValues(text);
+    const row = parseValues(text);
+    if (!row) {
+      const error = `unexpected response body after login: ${text.slice(0, 120)}`;
+      console.error(`Weathercloud authed fetch failed for ${deviceId}: ${error}`);
+      return { row: null, error };
+    }
+    return { row };
   } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
     console.error(`Weathercloud authed fetch failed for ${deviceId}:`, err);
     cachedCookie = null;
     cachedCsrf = null;
-    return null;
+    return { row: null, error };
   }
 }
